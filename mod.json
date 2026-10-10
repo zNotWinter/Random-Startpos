@@ -6,7 +6,7 @@
 		"mac": "2.2081",
 		"ios": "2.2081"
 	},
-	"version": "v1.2.0",
+	"version": "v1.3.0",
 	"id": "random-startpos",
 	"name": "Random StartPos",
 	"developer": "zNotWinter",
@@ -16,16 +16,50 @@
 		"utility"
 	],
 	"settings": {
+		"title-general": {
+			"type": "title",
+			"name": "General"
+		},
 		"enabled": {
 			"type": "bool",
 			"name": "Enable Random StartPos",
 			"description": "Master toggle. When off, the mod does nothing.",
 			"default": true
 		},
+		"preset": {
+			"type": "string",
+			"name": "Preset",
+			"description": "custom = use the settings below. practice / challenge / chaos / drill override the trigger, mode and counts with a ready-made setup.",
+			"default": "custom",
+			"one-of": [
+				"custom",
+				"practice",
+				"challenge",
+				"chaos",
+				"drill"
+			],
+			"enable-if": "enabled"
+		},
+		"title-trigger": {
+			"type": "title",
+			"name": "When To Switch"
+		},
+		"trigger": {
+			"type": "string",
+			"name": "Switch Trigger",
+			"description": "deaths = after a number of deaths. chance = random chance on every death. streak = when you stop improving on a StartPos.",
+			"default": "deaths",
+			"one-of": [
+				"deaths",
+				"chance",
+				"streak"
+			],
+			"enable-if": "enabled"
+		},
 		"deaths-until-switch": {
 			"type": "int",
 			"name": "Deaths Until Switch",
-			"description": "How many deaths before the StartPos changes. 1 = switch on every death.",
+			"description": "Deaths before switching (deaths trigger), or deaths in a row without improving (streak trigger). 1 = every death.",
 			"default": 1,
 			"min": 1,
 			"max": 100,
@@ -33,13 +67,15 @@
 				"input": true,
 				"slider": true,
 				"arrows": true
-			}
+			},
+			"enable-if": "enabled"
 		},
 		"random-threshold": {
 			"type": "bool",
 			"name": "Randomize Death Count",
 			"description": "Pick a random number of deaths between 'Deaths Until Switch' and 'Max Deaths' before each switch.",
-			"default": false
+			"default": false,
+			"enable-if": "enabled"
 		},
 		"max-deaths": {
 			"type": "int",
@@ -52,56 +88,41 @@
 				"input": true,
 				"slider": true,
 				"arrows": true
-			}
+			},
+			"enable-if": "random-threshold"
 		},
-		"mode": {
-			"type": "string",
-			"name": "Switch Mode",
-			"description": "random = any StartPos. next = left to right. previous = right to left. ping-pong = bounce back and forth.",
-			"default": "random",
-			"one-of": [
-				"random",
-				"next",
-				"previous",
-				"ping-pong"
-			]
-		},
-		"avoid-recent": {
+		"chaos-chance": {
 			"type": "int",
-			"name": "Avoid Recent Picks",
-			"description": "Random mode: don't pick any of the last N StartPos again. 0 = allow repeats, 1 = never the same twice in a row.",
-			"default": 1,
-			"min": 0,
-			"max": 10,
+			"name": "Chaos Chance (%)",
+			"description": "Chance of switching on each death when the trigger is 'chance'.",
+			"default": 40,
+			"min": 1,
+			"max": 100,
 			"control": {
 				"input": true,
 				"slider": true,
 				"arrows": true
-			}
+			},
+			"enable-if": "enabled"
 		},
-		"excluded": {
-			"type": "string",
-			"name": "Excluded StartPos",
-			"description": "Numbers of StartPos to never pick, separated by commas (numbered left to right from 1). Example: 1,4",
-			"default": "",
-			"filter": "0123456789,"
-		},
-		"include-level-start": {
-			"type": "bool",
-			"name": "Include Level Start",
-			"description": "Also allow the very beginning of the level as a possible spawn.",
-			"default": false
-		},
-		"switch-on-complete": {
-			"type": "bool",
-			"name": "Switch On Level Complete",
-			"description": "Also pick a new StartPos when you beat the level from a StartPos.",
-			"default": false
+		"streak-tolerance": {
+			"type": "int",
+			"name": "Streak Tolerance (%)",
+			"description": "Streak trigger: a death must get this many percent farther than your best on the current StartPos to count as improving.",
+			"default": 2,
+			"min": 0,
+			"max": 20,
+			"control": {
+				"input": true,
+				"slider": true,
+				"arrows": true
+			},
+			"enable-if": "enabled"
 		},
 		"min-percent": {
 			"type": "int",
 			"name": "Only Count Deaths After %",
-			"description": "Deaths before this level percentage don't count toward switching. 0 = count every death.",
+			"description": "Deaths before this level percentage are ignored. 0 = count every death.",
 			"default": 0,
 			"min": 0,
 			"max": 99,
@@ -109,84 +130,153 @@
 				"input": true,
 				"slider": true,
 				"arrows": true
-			}
+			},
+			"enable-if": "enabled"
 		},
 		"ignore-practice": {
 			"type": "bool",
 			"name": "Disable In Practice Mode",
-			"description": "Practice mode checkpoints override StartPos. Enable this to stop counting deaths while in practice mode.",
-			"default": false
+			"description": "Stop counting deaths in practice mode (checkpoints override StartPos there).",
+			"default": false,
+			"enable-if": "enabled"
 		},
 		"clear-checkpoints": {
 			"type": "bool",
 			"name": "Clear Checkpoints On Switch",
-			"description": "In practice mode, checkpoints override StartPos. This removes them when a switch happens so the new StartPos actually applies.",
-			"default": true
+			"description": "Practice mode: remove checkpoints when a switch happens so the new StartPos applies. Off by default - removing checkpoints can affect practice music sync.",
+			"default": false,
+			"enable-if": "enabled"
+		},
+		"switch-on-complete": {
+			"type": "bool",
+			"name": "Switch On Level Complete",
+			"description": "Also pick a new StartPos when you beat the level.",
+			"default": false,
+			"enable-if": "enabled"
+		},
+		"title-pick": {
+			"type": "title",
+			"name": "Which StartPos"
+		},
+		"mode": {
+			"type": "string",
+			"name": "Pick Mode",
+			"description": "random = any. shuffle = every StartPos once before any repeat. weighted = favors sections you die in most. next / previous / ping-pong = in order.",
+			"default": "random",
+			"one-of": [
+				"random",
+				"shuffle",
+				"weighted",
+				"next",
+				"previous",
+				"ping-pong"
+			],
+			"enable-if": "enabled"
+		},
+		"avoid-recent": {
+			"type": "int",
+			"name": "Avoid Recent Picks",
+			"description": "random / weighted: don't pick any of the last N StartPos again. 0 = allow repeats, 1 = never the same twice in a row.",
+			"default": 1,
+			"min": 0,
+			"max": 10,
+			"control": {
+				"input": true,
+				"slider": true,
+				"arrows": true
+			},
+			"enable-if": "enabled"
+		},
+		"excluded": {
+			"type": "string",
+			"name": "Excluded StartPos",
+			"description": "Numbers of StartPos to never pick, separated by commas (numbered left to right from 1). Example: 1,4",
+			"default": "",
+			"filter": "0123456789,",
+			"enable-if": "enabled"
+		},
+		"include-level-start": {
+			"type": "bool",
+			"name": "Include Level Start",
+			"description": "Also allow the very beginning of the level as a spawn.",
+			"default": false,
+			"enable-if": "enabled"
+		},
+		"title-feedback": {
+			"type": "title",
+			"name": "Feedback"
 		},
 		"show-notification": {
 			"type": "bool",
 			"name": "Show Notification",
 			"description": "Show a small popup telling you which StartPos was selected.",
-			"default": true
+			"default": false,
+			"enable-if": "enabled"
 		},
 		"notification-duration": {
 			"type": "float",
 			"name": "Notification Duration",
-			"description": "How long the switch popup stays on screen (seconds).",
+			"description": "How long the popup stays on screen (seconds).",
 			"default": 0.8,
 			"min": 0.3,
 			"max": 3.0,
 			"control": {
 				"input": true,
 				"slider": true
-			}
+			},
+			"enable-if": "show-notification"
 		},
 		"play-sound": {
 			"type": "bool",
 			"name": "Play Sound On Switch",
 			"description": "Play a short sound when the StartPos changes.",
-			"default": false
+			"default": false,
+			"enable-if": "enabled"
 		},
 		"sound": {
 			"type": "string",
 			"name": "Switch Sound",
-			"description": "Which sound plays when the StartPos changes (needs 'Play Sound On Switch').",
+			"description": "Which sound plays on a switch.",
 			"default": "counter003.ogg",
 			"one-of": [
 				"counter003.ogg",
 				"playSound_01.ogg",
 				"achievement_01.ogg",
 				"quitSound_01.ogg"
-			]
+			],
+			"enable-if": "play-sound"
 		},
 		"show-label": {
 			"type": "bool",
 			"name": "Show On-Screen Label",
-			"description": "Show the current StartPos and deaths left until the next switch while playing.",
-			"default": true
+			"description": "Show the current StartPos and the trigger status while playing.",
+			"default": false,
+			"enable-if": "enabled"
 		},
 		"show-total-deaths": {
 			"type": "bool",
 			"name": "Label: Show Total Deaths",
-			"description": "Add a death counter for this play session to the label.",
-			"default": false
+			"description": "Add a session death counter to the label.",
+			"default": false,
+			"enable-if": "show-label"
 		},
 		"label-position": {
 			"type": "string",
 			"name": "Label Position",
-			"description": "Where the on-screen label appears.",
+			"description": "Where the label appears.",
 			"default": "top-left",
 			"one-of": [
 				"top-left",
 				"top-right",
 				"bottom-left",
 				"bottom-right"
-			]
+			],
+			"enable-if": "show-label"
 		},
 		"label-color": {
 			"type": "string",
 			"name": "Label Color",
-			"description": "Color of the on-screen label.",
+			"description": "Color of the label text.",
 			"default": "white",
 			"one-of": [
 				"white",
@@ -194,19 +284,21 @@
 				"yellow",
 				"red",
 				"cyan"
-			]
+			],
+			"enable-if": "show-label"
 		},
 		"label-scale": {
 			"type": "float",
 			"name": "Label Size",
-			"description": "Size of the on-screen label.",
+			"description": "Size of the label.",
 			"default": 0.4,
 			"min": 0.2,
 			"max": 1.0,
 			"control": {
 				"input": true,
 				"slider": true
-			}
+			},
+			"enable-if": "show-label"
 		},
 		"label-opacity": {
 			"type": "int",
@@ -219,7 +311,24 @@
 				"input": true,
 				"slider": true,
 				"arrows": true
-			}
+			},
+			"enable-if": "show-label"
+		},
+		"title-ui": {
+			"type": "title",
+			"name": "Interface"
+		},
+		"pause-button-position": {
+			"type": "string",
+			"name": "Pause Panel Position",
+			"description": "Which corner of the pause menu holds the small StartPos panel. Move it if another mod sits there.",
+			"default": "bottom-right",
+			"one-of": [
+				"bottom-right",
+				"bottom-left",
+				"top-right",
+				"top-left"
+			]
 		}
 	}
 }
