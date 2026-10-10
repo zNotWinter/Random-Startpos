@@ -1,5 +1,5 @@
 {
-	"geode": "5.0.0",
+	"geode": "5.7.1",
 	"gd": {
 		"win": "2.2081",
 		"android": "2.2081",
@@ -7,9 +7,9 @@
 		"ios": "2.2081"
 	},
 	"version": "v1.0.0",
-	"id": "random-startpos",
+	"id": "yourname.random-startpos",
 	"name": "Random StartPos",
-	"developer": "zNotWinter",
+	"developer": "YourName",
 	"description": "Switches to a random StartPos every N deaths.",
 	"tags": ["gameplay", "utility"],
 	"settings": {
