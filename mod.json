@@ -6,12 +6,15 @@
 		"mac": "2.2081",
 		"ios": "2.2081"
 	},
-	"version": "v1.0.0",
-	"id": "yourname.random-startpos",
+	"version": "v1.2.0",
+	"id": "random-startpos",
 	"name": "Random StartPos",
-	"developer": "YourName",
+	"developer": "zNotWinter",
 	"description": "Switches to a random StartPos every N deaths.",
-	"tags": ["gameplay", "utility"],
+	"tags": [
+		"gameplay",
+		"utility"
+	],
 	"settings": {
 		"enabled": {
 			"type": "bool",
@@ -22,7 +25,7 @@
 		"deaths-until-switch": {
 			"type": "int",
 			"name": "Deaths Until Switch",
-			"description": "How many deaths before a new random StartPos is picked. 1 = switch on every death.",
+			"description": "How many deaths before the StartPos changes. 1 = switch on every death.",
 			"default": 1,
 			"min": 1,
 			"max": 100,
@@ -32,11 +35,56 @@
 				"arrows": true
 			}
 		},
-		"no-repeat": {
+		"random-threshold": {
 			"type": "bool",
-			"name": "Avoid Repeats",
-			"description": "Never pick the same StartPos twice in a row (if there is more than one to choose from).",
-			"default": true
+			"name": "Randomize Death Count",
+			"description": "Pick a random number of deaths between 'Deaths Until Switch' and 'Max Deaths' before each switch.",
+			"default": false
+		},
+		"max-deaths": {
+			"type": "int",
+			"name": "Max Deaths (Randomize)",
+			"description": "Upper limit used when 'Randomize Death Count' is on.",
+			"default": 5,
+			"min": 1,
+			"max": 100,
+			"control": {
+				"input": true,
+				"slider": true,
+				"arrows": true
+			}
+		},
+		"mode": {
+			"type": "string",
+			"name": "Switch Mode",
+			"description": "random = any StartPos. next = left to right. previous = right to left. ping-pong = bounce back and forth.",
+			"default": "random",
+			"one-of": [
+				"random",
+				"next",
+				"previous",
+				"ping-pong"
+			]
+		},
+		"avoid-recent": {
+			"type": "int",
+			"name": "Avoid Recent Picks",
+			"description": "Random mode: don't pick any of the last N StartPos again. 0 = allow repeats, 1 = never the same twice in a row.",
+			"default": 1,
+			"min": 0,
+			"max": 10,
+			"control": {
+				"input": true,
+				"slider": true,
+				"arrows": true
+			}
+		},
+		"excluded": {
+			"type": "string",
+			"name": "Excluded StartPos",
+			"description": "Numbers of StartPos to never pick, separated by commas (numbered left to right from 1). Example: 1,4",
+			"default": "",
+			"filter": "0123456789,"
 		},
 		"include-level-start": {
 			"type": "bool",
@@ -44,17 +92,134 @@
 			"description": "Also allow the very beginning of the level as a possible spawn.",
 			"default": false
 		},
+		"switch-on-complete": {
+			"type": "bool",
+			"name": "Switch On Level Complete",
+			"description": "Also pick a new StartPos when you beat the level from a StartPos.",
+			"default": false
+		},
+		"min-percent": {
+			"type": "int",
+			"name": "Only Count Deaths After %",
+			"description": "Deaths before this level percentage don't count toward switching. 0 = count every death.",
+			"default": 0,
+			"min": 0,
+			"max": 99,
+			"control": {
+				"input": true,
+				"slider": true,
+				"arrows": true
+			}
+		},
 		"ignore-practice": {
 			"type": "bool",
 			"name": "Disable In Practice Mode",
 			"description": "Practice mode checkpoints override StartPos. Enable this to stop counting deaths while in practice mode.",
 			"default": false
 		},
+		"clear-checkpoints": {
+			"type": "bool",
+			"name": "Clear Checkpoints On Switch",
+			"description": "In practice mode, checkpoints override StartPos. This removes them when a switch happens so the new StartPos actually applies.",
+			"default": true
+		},
 		"show-notification": {
 			"type": "bool",
 			"name": "Show Notification",
 			"description": "Show a small popup telling you which StartPos was selected.",
 			"default": true
+		},
+		"notification-duration": {
+			"type": "float",
+			"name": "Notification Duration",
+			"description": "How long the switch popup stays on screen (seconds).",
+			"default": 0.8,
+			"min": 0.3,
+			"max": 3.0,
+			"control": {
+				"input": true,
+				"slider": true
+			}
+		},
+		"play-sound": {
+			"type": "bool",
+			"name": "Play Sound On Switch",
+			"description": "Play a short sound when the StartPos changes.",
+			"default": false
+		},
+		"sound": {
+			"type": "string",
+			"name": "Switch Sound",
+			"description": "Which sound plays when the StartPos changes (needs 'Play Sound On Switch').",
+			"default": "counter003.ogg",
+			"one-of": [
+				"counter003.ogg",
+				"playSound_01.ogg",
+				"achievement_01.ogg",
+				"quitSound_01.ogg"
+			]
+		},
+		"show-label": {
+			"type": "bool",
+			"name": "Show On-Screen Label",
+			"description": "Show the current StartPos and deaths left until the next switch while playing.",
+			"default": true
+		},
+		"show-total-deaths": {
+			"type": "bool",
+			"name": "Label: Show Total Deaths",
+			"description": "Add a death counter for this play session to the label.",
+			"default": false
+		},
+		"label-position": {
+			"type": "string",
+			"name": "Label Position",
+			"description": "Where the on-screen label appears.",
+			"default": "top-left",
+			"one-of": [
+				"top-left",
+				"top-right",
+				"bottom-left",
+				"bottom-right"
+			]
+		},
+		"label-color": {
+			"type": "string",
+			"name": "Label Color",
+			"description": "Color of the on-screen label.",
+			"default": "white",
+			"one-of": [
+				"white",
+				"green",
+				"yellow",
+				"red",
+				"cyan"
+			]
+		},
+		"label-scale": {
+			"type": "float",
+			"name": "Label Size",
+			"description": "Size of the on-screen label.",
+			"default": 0.4,
+			"min": 0.2,
+			"max": 1.0,
+			"control": {
+				"input": true,
+				"slider": true
+			}
+		},
+		"label-opacity": {
+			"type": "int",
+			"name": "Label Opacity",
+			"description": "How see-through the label is (percent).",
+			"default": 60,
+			"min": 10,
+			"max": 100,
+			"control": {
+				"input": true,
+				"slider": true,
+				"arrows": true
+			}
 		}
 	}
 }
