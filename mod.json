@@ -1,0 +1,60 @@
+{
+	"geode": "5.0.0",
+	"gd": {
+		"win": "2.2081",
+		"android": "2.2081",
+		"mac": "2.2081",
+		"ios": "2.2081"
+	},
+	"version": "v1.0.0",
+	"id": "random-startpos",
+	"name": "Random StartPos",
+	"developer": "zNotWinter",
+	"description": "Switches to a random StartPos every N deaths.",
+	"tags": ["gameplay", "utility"],
+	"settings": {
+		"enabled": {
+			"type": "bool",
+			"name": "Enable Random StartPos",
+			"description": "Master toggle. When off, the mod does nothing.",
+			"default": true
+		},
+		"deaths-until-switch": {
+			"type": "int",
+			"name": "Deaths Until Switch",
+			"description": "How many deaths before a new random StartPos is picked. 1 = switch on every death.",
+			"default": 1,
+			"min": 1,
+			"max": 100,
+			"control": {
+				"input": true,
+				"slider": true,
+				"arrows": true
+			}
+		},
+		"no-repeat": {
+			"type": "bool",
+			"name": "Avoid Repeats",
+			"description": "Never pick the same StartPos twice in a row (if there is more than one to choose from).",
+			"default": true
+		},
+		"include-level-start": {
+			"type": "bool",
+			"name": "Include Level Start",
+			"description": "Also allow the very beginning of the level as a possible spawn.",
+			"default": false
+		},
+		"ignore-practice": {
+			"type": "bool",
+			"name": "Disable In Practice Mode",
+			"description": "Practice mode checkpoints override StartPos. Enable this to stop counting deaths while in practice mode.",
+			"default": false
+		},
+		"show-notification": {
+			"type": "bool",
+			"name": "Show Notification",
+			"description": "Show a small popup telling you which StartPos was selected.",
+			"default": true
+		}
+	}
+}
