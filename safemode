@@ -1,0 +1,34 @@
+// Optional module: automatic safe mode (not toggleable).
+// While you play from a StartPos picked by this mod, the level is treated as a
+// test run, so a "new best" from the StartPos is never saved and the new-best
+// popup never shows. Your real progress from 0% stays untouched.
+// If this file ever fails to compile, delete it: the rest of the mod still works.
+#include "rsp.hpp"
+
+#include <Geode/modify/PlayLayer.hpp>
+
+namespace {
+	bool s_orig = false;
+	bool s_changed = false;
+}
+
+struct $modify(RSPSafeMode, PlayLayer) {
+	void setupHasCompleted() {
+		PlayLayer::setupHasCompleted();
+		s_orig = m_isTestMode;
+		s_changed = false;
+	}
+
+	void resetLevel() {
+		if (g_rspFromStartPos) {
+			if (!m_isTestMode) {
+				m_isTestMode = true;
+				s_changed = true;
+			}
+		} else if (s_changed) {
+			m_isTestMode = s_orig;
+			s_changed = false;
+		}
+		PlayLayer::resetLevel();
+	}
+};
