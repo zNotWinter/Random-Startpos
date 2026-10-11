@@ -1,0 +1,189 @@
+// Optional module: StartPos stats popup + a button on the level page (before you press play).
+// If this file ever fails to compile, delete it: the rest of the mod still works.
+#include "rsp.hpp"
+
+#include <Geode/modify/LevelInfoLayer.hpp>
+#include <Geode/ui/Popup.hpp>
+
+class RSPStatsPopup : public geode::Popup {
+protected:
+	CCPoint m_c;
+	std::vector<CCNode*> m_nodes;
+	std::string m_name;
+	int m_key = 0;
+
+	bool init(GJGameLevel* level) {
+		if (!Popup::init(320.f, 270.f)) return false;
+		m_key = rspLevelKey(level);
+		m_name = level ? std::string(level->m_levelName.c_str()) : std::string("Level");
+		auto win = CCDirector::get()->getWinSize();
+		m_c = m_buttonMenu->convertToNodeSpace({win.width / 2, win.height / 2});
+		this->build();
+		return true;
+	}
+
+	CCLabelBMFont* text(std::string const& s, float x, float y, float scale, ccColor3B col, CCPoint anchor = {0.5f, 0.5f}) {
+		auto l = CCLabelBMFont::create(s.c_str(), "bigFont.fnt");
+		l->setScale(scale);
+		l->setColor(col);
+		l->setAnchorPoint(anchor);
+		l->setPosition({m_c.x + x, m_c.y + y});
+		m_buttonMenu->addChild(l, 2);
+		m_nodes.push_back(l);
+		return l;
+	}
+
+	void bar(float left, float y, float w, float h, ccColor3B col, GLubyte op) {
+		auto b = CCScale9Sprite::create("square02_001.png");
+		b->setContentSize(CCSize(w, h));
+		b->setAnchorPoint({0.f, 0.5f});
+		b->setColor(col);
+		b->setOpacity(op);
+		b->setPosition({m_c.x + left, m_c.y + y});
+		m_buttonMenu->addChild(b, 1);
+		m_nodes.push_back(b);
+	}
+
+	void pillButton(std::string const& t, float w, float h, float x, float y, SEL_MenuHandler sel, ccColor3B bg, ccColor3B tc) {
+		auto node = CCNode::create();
+		node->setContentSize(CCSize(w, h));
+		node->ignoreAnchorPointForPosition(false);
+		auto b = CCScale9Sprite::create("square02_001.png");
+		b->setContentSize(CCSize(w, h));
+		b->setPosition({w / 2, h / 2});
+		b->setColor(bg);
+		node->addChild(b);
+		auto l = CCLabelBMFont::create(t.c_str(), "bigFont.fnt");
+		l->setScale(0.36f);
+		l->setColor(tc);
+		l->setPosition({w / 2, h / 2});
+		node->addChild(l);
+		auto item = CCMenuItemSpriteExtra::create(node, this, sel);
+		item->setPosition({m_c.x + x, m_c.y + y});
+		m_buttonMenu->addChild(item, 3);
+		m_nodes.push_back(item);
+	}
+
+	void build() {
+		for (auto n : m_nodes) n->removeFromParent();
+		m_nodes.clear();
+
+		auto th = rspTheme();
+		ccColor3B lift = {static_cast<GLubyte>(std::min(255, th.panel.r + 26)),
+		                  static_cast<GLubyte>(std::min(255, th.panel.g + 26)),
+		                  static_cast<GLubyte>(std::min(255, th.panel.b + 26))};
+		auto& st = rspStatsFor(m_key);
+
+		auto bg = CCScale9Sprite::create("square02_001.png");
+		bg->setContentSize(CCSize(312.f, 262.f));
+		bg->setColor(th.panel);
+		bg->setOpacity(245);
+		bg->setPosition(m_c);
+		m_buttonMenu->addChild(bg, -1);
+		m_nodes.push_back(bg);
+
+		text("StartPos stats", 0.f, 116.f, 0.62f, th.accent);
+		text(m_name, 0.f, 98.f, 0.34f, th.dim);
+
+		if (st.sec.empty()) {
+			text("No StartPos runs yet", 0.f, 22.f, 0.5f, th.text);
+			text("Play with Random StartPos on and your", 0.f, -4.f, 0.32f, th.dim);
+			text("deaths and best runs show up here.", 0.f, -18.f, 0.32f, th.dim);
+		} else {
+			int total = 0, bestK = 0;
+			float bestV = 0.f;
+			for (auto& [k, v] : st.sec) {
+				total += v.deaths;
+				if (v.best > bestV) { bestV = v.best; bestK = k; }
+			}
+			text(fmt::format("{} deaths from StartPos", total), -140.f, 76.f, 0.38f, th.text, {0.f, 0.5f});
+			text(fmt::format("Best: StartPos {} ({:.0f}%)", bestK, bestV), 140.f, 76.f, 0.38f, th.accent, {1.f, 0.5f});
+
+			text("StartPos", -136.f, 54.f, 0.3f, th.dim, {0.f, 0.5f});
+			text("Best run", -40.f, 54.f, 0.3f, th.dim, {0.f, 0.5f});
+			text("Deaths", 140.f, 54.f, 0.3f, th.dim, {1.f, 0.5f});
+
+			int i = 0;
+			for (auto& [k, v] : st.sec) {
+				if (i >= 7) break;
+				float y = 34.f - i * 19.f;
+				text(fmt::format("StartPos {}", k), -136.f, y, 0.36f, th.text, {0.f, 0.5f});
+				this->bar(-40.f, y, 90.f, 8.f, lift, 255);
+				if (v.best > 0.f) this->bar(-40.f, y, std::max(3.f, 90.f * v.best / 100.f), 8.f, th.accent, 255);
+				text(fmt::format("{:.0f}%", v.best), 58.f, y, 0.34f, th.text, {0.f, 0.5f});
+				text(std::to_string(v.deaths), 140.f, y, 0.36f, th.text, {1.f, 0.5f});
+				i++;
+			}
+			if (st.sec.size() > 7) {
+				text(fmt::format("+{} more", st.sec.size() - 7), 0.f, -98.f, 0.28f, th.dim);
+			}
+		}
+
+		this->pillButton("Reset", 90.f, 22.f, -60.f, -118.f, menu_selector(RSPStatsPopup::onReset), lift, th.text);
+		this->pillButton("Settings", 90.f, 22.f, 60.f, -118.f, menu_selector(RSPStatsPopup::onSettings), th.accent, th.panel);
+	}
+
+	void onReset(CCObject*) {
+		rspStatsFor(m_key).sec.clear();
+		rspStatsSave(m_key);
+		(void)Mod::get()->saveData();
+		this->build();
+	}
+
+	void onSettings(CCObject*) {
+		rspOpenSettings();
+	}
+
+public:
+	static RSPStatsPopup* create(GJGameLevel* level) {
+		auto ret = new RSPStatsPopup();
+		if (ret->init(level)) {
+			ret->autorelease();
+			return ret;
+		}
+		delete ret;
+		return nullptr;
+	}
+};
+
+struct $modify(RSPLevelInfo, LevelInfoLayer) {
+	bool init(GJGameLevel* level, bool challenge) {
+		if (!LevelInfoLayer::init(level, challenge)) return false;
+		if (!rspOpt<bool>("show-stats-button")) return true;
+
+		auto th = rspTheme();
+		auto win = CCDirector::get()->getWinSize();
+		std::string where = rspOpt<std::string>("stats-button-position");
+		float w = 112.f, h = 24.f, m = 8.f;
+		float cx = (where == "bottom-left" || where == "top-left") ? m + w / 2 : win.width - m - w / 2;
+		float cy = (where == "top-left" || where == "top-right") ? win.height - m - h / 2 : m + h / 2;
+
+		auto node = CCNode::create();
+		node->setContentSize(CCSize(w, h));
+		node->ignoreAnchorPointForPosition(false);
+		auto bg = CCScale9Sprite::create("square02_001.png");
+		bg->setContentSize(CCSize(w, h));
+		bg->setPosition({w / 2, h / 2});
+		bg->setColor(th.panel);
+		bg->setOpacity(225);
+		node->addChild(bg);
+		auto lb = CCLabelBMFont::create("StartPos stats", "bigFont.fnt");
+		lb->setScale(0.34f);
+		lb->setColor(th.accent);
+		lb->setPosition({w / 2, h / 2});
+		node->addChild(lb);
+
+		auto item = CCMenuItemSpriteExtra::create(node, this, menu_selector(RSPLevelInfo::onRSPStats));
+		item->setPosition({cx, cy});
+		auto menu = CCMenu::create();
+		menu->setPosition({0.f, 0.f});
+		menu->setID("random-startpos-stats-menu"_spr);
+		menu->addChild(item);
+		this->addChild(menu, 20);
+		return true;
+	}
+
+	void onRSPStats(CCObject*) {
+		if (auto p = RSPStatsPopup::create(m_level)) p->show();
+	}
+};
