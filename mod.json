@@ -6,7 +6,7 @@
 		"mac": "2.2081",
 		"ios": "2.2081"
 	},
-	"version": "v1.3.0",
+	"version": "v1.4.0",
 	"id": "random-startpos",
 	"name": "Random StartPos",
 	"developer": "zNotWinter",
@@ -23,13 +23,13 @@
 		"enabled": {
 			"type": "bool",
 			"name": "Enable Random StartPos",
-			"description": "Master toggle. When off, the mod does nothing.",
+			"description": "Master switch. When off the mod does no work at all, and your next respawn goes back to 0% if the mod had moved you to a StartPos. On levels with no StartPos the mod idles by itself and wakes up on the next level.",
 			"default": true
 		},
 		"preset": {
 			"type": "string",
 			"name": "Preset",
-			"description": "custom = use the settings below. practice / challenge / chaos / drill override the trigger, mode and counts with a ready-made setup.",
+			"description": "custom uses your settings. practice = weighted picks every 3 deaths. challenge = shuffle, every death. chaos = 40% chance per death. drill = stay until you stop improving. Presets override the trigger, mode and counts while selected.",
 			"default": "custom",
 			"one-of": [
 				"custom",
@@ -39,6 +39,19 @@
 				"drill"
 			],
 			"enable-if": "enabled"
+		},
+		"theme": {
+			"type": "string",
+			"name": "Theme",
+			"description": "Colour scheme for the pause panel, label, switch indicator, stats popup and the in-game menu.",
+			"default": "midnight",
+			"one-of": [
+				"midnight",
+				"ocean",
+				"sunset",
+				"forest",
+				"mono"
+			]
 		},
 		"title-trigger": {
 			"type": "title",
@@ -59,8 +72,8 @@
 		"deaths-until-switch": {
 			"type": "int",
 			"name": "Deaths Until Switch",
-			"description": "Deaths before switching (deaths trigger), or deaths in a row without improving (streak trigger). 1 = every death.",
-			"default": 1,
+			"description": "Deaths before the StartPos changes (deaths trigger), or deaths in a row without beating your best (streak trigger). The switch happens the moment the counter hits zero. Default 3.",
+			"default": 3,
 			"min": 1,
 			"max": 100,
 			"control": {
@@ -73,7 +86,7 @@
 		"random-threshold": {
 			"type": "bool",
 			"name": "Randomize Death Count",
-			"description": "Pick a random number of deaths between 'Deaths Until Switch' and 'Max Deaths' before each switch.",
+			"description": "Pick a random number between 'Deaths Until Switch' and 'Max Deaths' before each switch, so you can't predict it.",
 			"default": false,
 			"enable-if": "enabled"
 		},
@@ -93,7 +106,7 @@
 		},
 		"chaos-chance": {
 			"type": "int",
-			"name": "Chaos Chance (%)",
+			"name": "Chance Per Death (%)",
 			"description": "Chance of switching on each death when the trigger is 'chance'.",
 			"default": 40,
 			"min": 1,
@@ -122,7 +135,7 @@
 		"min-percent": {
 			"type": "int",
 			"name": "Only Count Deaths After %",
-			"description": "Deaths before this level percentage are ignored. 0 = count every death.",
+			"description": "Deaths before this level percentage are ignored. 0 counts every death.",
 			"default": 0,
 			"min": 0,
 			"max": 99,
@@ -143,7 +156,7 @@
 		"clear-checkpoints": {
 			"type": "bool",
 			"name": "Clear Checkpoints On Switch",
-			"description": "Practice mode: remove checkpoints when a switch happens so the new StartPos applies. Off by default - removing checkpoints can affect practice music sync.",
+			"description": "Practice mode: remove checkpoints when a switch happens so the new StartPos applies. Off by default because removing checkpoints can affect practice music sync.",
 			"default": false,
 			"enable-if": "enabled"
 		},
@@ -154,6 +167,24 @@
 			"default": false,
 			"enable-if": "enabled"
 		},
+		"title-timing": {
+			"type": "title",
+			"name": "Respawn Delay"
+		},
+		"respawn-delay": {
+			"type": "int",
+			"name": "Respawn Delay (ms)",
+			"description": "After a switch the game freezes for this long so you can see where you landed before your icon moves. The music starts when the freeze ends, so it stays in sync. 0 turns the delay off.",
+			"default": 200,
+			"min": 0,
+			"max": 1500,
+			"control": {
+				"input": true,
+				"slider": true,
+				"arrows": true
+			},
+			"enable-if": "enabled"
+		},
 		"title-pick": {
 			"type": "title",
 			"name": "Which StartPos"
@@ -161,7 +192,7 @@
 		"mode": {
 			"type": "string",
 			"name": "Pick Mode",
-			"description": "random = any. shuffle = every StartPos once before any repeat. weighted = favors sections you die in most. next / previous / ping-pong = in order.",
+			"description": "random = any StartPos. shuffle = every StartPos once before any repeat. weighted = favors sections you die in most. next / previous / ping-pong = in order.",
 			"default": "random",
 			"one-of": [
 				"random",
@@ -176,8 +207,8 @@
 		"avoid-recent": {
 			"type": "int",
 			"name": "Avoid Recent Picks",
-			"description": "random / weighted: don't pick any of the last N StartPos again. 0 = allow repeats, 1 = never the same twice in a row.",
-			"default": 1,
+			"description": "random / weighted: never pick any of the last N StartPos again. 0 allows repeats. Default 2 keeps the picks from clustering.",
+			"default": 2,
 			"min": 0,
 			"max": 10,
 			"control": {
@@ -202,29 +233,123 @@
 			"default": false,
 			"enable-if": "enabled"
 		},
-		"title-feedback": {
-			"type": "title",
-			"name": "Feedback"
-		},
-		"show-notification": {
+		"use-seed": {
 			"type": "bool",
-			"name": "Show Notification",
-			"description": "Show a small popup telling you which StartPos was selected.",
+			"name": "Seeded Sequence",
+			"description": "Same seed gives the same StartPos order every time (random and shuffle modes). Great for fair races and replaying a challenge.",
 			"default": false,
 			"enable-if": "enabled"
 		},
-		"notification-duration": {
+		"seed": {
+			"type": "string",
+			"name": "Seed",
+			"description": "Letters, numbers and dashes. Used when 'Seeded Sequence' is on.",
+			"default": "DASH-4821",
+			"filter": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-",
+			"enable-if": "use-seed"
+		},
+		"title-practice": {
+			"type": "title",
+			"name": "Practice"
+		},
+		"practice-style": {
+			"type": "string",
+			"name": "Practice Style",
+			"description": "off = use the trigger. beat = stay on a StartPos until you pass it. build = start at the last StartPos and move one section earlier after each clear.",
+			"default": "off",
+			"one-of": [
+				"off",
+				"beat",
+				"build"
+			],
+			"enable-if": "enabled"
+		},
+		"passes-needed": {
+			"type": "int",
+			"name": "Passes Needed (Beat)",
+			"description": "Beat style: how many times you must get past the next StartPos before moving on.",
+			"default": 1,
+			"min": 1,
+			"max": 10,
+			"control": {
+				"input": true,
+				"slider": true,
+				"arrows": true
+			},
+			"enable-if": "enabled"
+		},
+		"give-up-after": {
+			"type": "int",
+			"name": "Give Up After (Beat)",
+			"description": "Beat style: move on anyway after this many deaths on one StartPos. 0 never gives up.",
+			"default": 0,
+			"min": 0,
+			"max": 50,
+			"control": {
+				"input": true,
+				"slider": true,
+				"arrows": true
+			},
+			"enable-if": "enabled"
+		},
+		"clears-needed": {
+			"type": "int",
+			"name": "Clears Needed (Build-up)",
+			"description": "Build-up style: level completions from a StartPos before the start moves one section earlier.",
+			"default": 2,
+			"min": 1,
+			"max": 10,
+			"control": {
+				"input": true,
+				"slider": true,
+				"arrows": true
+			},
+			"enable-if": "enabled"
+		},
+		"loop-build": {
+			"type": "bool",
+			"name": "Loop Build-up",
+			"description": "When build-up reaches the first StartPos, start over from the last one.",
+			"default": true,
+			"enable-if": "enabled"
+		},
+		"title-alerts": {
+			"type": "title",
+			"name": "Switch Indicator"
+		},
+		"show-indicator": {
+			"type": "bool",
+			"name": "Show Switch Indicator",
+			"description": "A subtle note, low on the screen, that appears as you die and shows which StartPos you are about to go to.",
+			"default": true,
+			"enable-if": "enabled"
+		},
+		"indicator-size": {
 			"type": "float",
-			"name": "Notification Duration",
-			"description": "How long the popup stays on screen (seconds).",
-			"default": 0.8,
-			"min": 0.3,
-			"max": 3.0,
+			"name": "Indicator Size",
+			"description": "Text size of the switch indicator.",
+			"default": 0.35,
+			"min": 0.2,
+			"max": 0.8,
 			"control": {
 				"input": true,
 				"slider": true
 			},
-			"enable-if": "show-notification"
+			"enable-if": "show-indicator"
+		},
+		"indicator-opacity": {
+			"type": "int",
+			"name": "Indicator Opacity (%)",
+			"description": "How visible the indicator is.",
+			"default": 70,
+			"min": 10,
+			"max": 100,
+			"control": {
+				"input": true,
+				"slider": true,
+				"arrows": true
+			},
+			"enable-if": "show-indicator"
 		},
 		"play-sound": {
 			"type": "bool",
@@ -246,24 +371,48 @@
 			],
 			"enable-if": "play-sound"
 		},
+		"title-label": {
+			"type": "title",
+			"name": "On-Screen Label"
+		},
 		"show-label": {
 			"type": "bool",
 			"name": "Show On-Screen Label",
-			"description": "Show the current StartPos and the trigger status while playing.",
-			"default": false,
+			"description": "Shows the current StartPos and the trigger status while you play.",
+			"default": true,
 			"enable-if": "enabled"
 		},
-		"show-total-deaths": {
-			"type": "bool",
-			"name": "Label: Show Total Deaths",
-			"description": "Add a session death counter to the label.",
-			"default": false,
+		"label-size": {
+			"type": "float",
+			"name": "Label Size",
+			"description": "Text size of the label. Default 0.3.",
+			"default": 0.3,
+			"min": 0.2,
+			"max": 1.0,
+			"control": {
+				"input": true,
+				"slider": true
+			},
+			"enable-if": "show-label"
+		},
+		"label-opacity": {
+			"type": "int",
+			"name": "Label Opacity (%)",
+			"description": "How see-through the label is.",
+			"default": 60,
+			"min": 10,
+			"max": 100,
+			"control": {
+				"input": true,
+				"slider": true,
+				"arrows": true
+			},
 			"enable-if": "show-label"
 		},
 		"label-position": {
 			"type": "string",
 			"name": "Label Position",
-			"description": "Where the label appears.",
+			"description": "Corner of the screen.",
 			"default": "top-left",
 			"one-of": [
 				"top-left",
@@ -276,9 +425,10 @@
 		"label-color": {
 			"type": "string",
 			"name": "Label Color",
-			"description": "Color of the label text.",
-			"default": "white",
+			"description": "theme uses your theme's accent colour.",
+			"default": "theme",
 			"one-of": [
+				"theme",
 				"white",
 				"green",
 				"yellow",
@@ -287,48 +437,89 @@
 			],
 			"enable-if": "show-label"
 		},
-		"label-scale": {
-			"type": "float",
-			"name": "Label Size",
-			"description": "Size of the label.",
-			"default": 0.4,
-			"min": 0.2,
-			"max": 1.0,
-			"control": {
-				"input": true,
-				"slider": true
-			},
+		"hud-style": {
+			"type": "string",
+			"name": "Label Style",
+			"description": "pill = solid rounded background. glass = see-through background. minimal = text only.",
+			"default": "pill",
+			"one-of": [
+				"pill",
+				"glass",
+				"minimal"
+			],
 			"enable-if": "show-label"
 		},
-		"label-opacity": {
-			"type": "int",
-			"name": "Label Opacity",
-			"description": "How see-through the label is (percent).",
-			"default": 60,
-			"min": 10,
-			"max": 100,
-			"control": {
-				"input": true,
-				"slider": true,
-				"arrows": true
-			},
+		"show-total-deaths": {
+			"type": "bool",
+			"name": "Label: Show Total Deaths",
+			"description": "Add a session death counter to the label.",
+			"default": false,
 			"enable-if": "show-label"
+		},
+		"title-stats": {
+			"type": "title",
+			"name": "Stats"
+		},
+		"track-stats": {
+			"type": "bool",
+			"name": "Track StartPos Stats",
+			"description": "Counts deaths and best percent only for runs started from a StartPos. Kept in memory while you play and saved when you leave the level, so it adds no lag.",
+			"default": true,
+			"enable-if": "enabled"
+		},
+		"show-stats-button": {
+			"type": "bool",
+			"name": "Stats Button On Level Page",
+			"description": "Adds a small button to the level page (before you press play) that opens your StartPos stats.",
+			"default": true
+		},
+		"stats-button-position": {
+			"type": "string",
+			"name": "Stats Button Position",
+			"description": "Corner of the level page.",
+			"default": "bottom-left",
+			"one-of": [
+				"top-left",
+				"top-right",
+				"bottom-left",
+				"bottom-right"
+			],
+			"enable-if": "show-stats-button"
 		},
 		"title-ui": {
 			"type": "title",
 			"name": "Interface"
 		},
-		"pause-button-position": {
+		"show-pause-panel": {
+			"type": "bool",
+			"name": "Show Pause Panel",
+			"description": "The small panel in the pause menu with the on/off checkbox and a settings button.",
+			"default": true
+		},
+		"pause-panel-position": {
 			"type": "string",
 			"name": "Pause Panel Position",
-			"description": "Which corner of the pause menu holds the small StartPos panel. Move it if another mod sits there.",
+			"description": "Corner of the pause menu.",
 			"default": "bottom-right",
 			"one-of": [
-				"bottom-right",
-				"bottom-left",
+				"top-left",
 				"top-right",
-				"top-left"
-			]
+				"bottom-left",
+				"bottom-right"
+			],
+			"enable-if": "show-pause-panel"
+		},
+		"compat-warning": {
+			"type": "bool",
+			"name": "Compatibility Warning",
+			"description": "Warn when you open the settings if another StartPos mod (such as StartPos Switcher or Smart StartPos) is turned on.",
+			"default": true
+		},
+		"debug-log": {
+			"type": "bool",
+			"name": "Debug Log",
+			"description": "Writes short lines to the Geode log when deaths are detected and StartPos are switched. Send the log if something doesn't work.",
+			"default": false
 		}
 	}
 }
