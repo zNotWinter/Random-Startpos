@@ -1,0 +1,148 @@
+#pragma once
+
+#include <Geode/Geode.hpp>
+#include <Geode/ui/GeodeUI.hpp>
+
+#include <algorithm>
+#include <cctype>
+#include <cstdio>
+#include <functional>
+#include <map>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
+using namespace geode::prelude;
+
+// ---------------------------------------------------------------------------
+// Settings helpers
+// ---------------------------------------------------------------------------
+template <class T>
+inline T rspOpt(char const* key) {
+	return Mod::get()->getSettingValue<T>(key);
+}
+inline bool rspEnabled() { return rspOpt<bool>("enabled"); }
+inline bool rspDebug() { return rspOpt<bool>("debug-log"); }
+
+// ---------------------------------------------------------------------------
+// Themes
+// ---------------------------------------------------------------------------
+struct RSPTheme {
+	ccColor3B panel;
+	ccColor3B accent;
+	ccColor3B text;
+	ccColor3B dim;
+};
+
+inline RSPTheme rspTheme() {
+	std::string n = rspOpt<std::string>("theme");
+	if (n == "ocean")  return {{8, 36, 56},  {90, 205, 255},  {232, 244, 255}, {140, 170, 190}};
+	if (n == "sunset") return {{48, 18, 40}, {255, 156, 98},  {255, 238, 230}, {190, 150, 150}};
+	if (n == "forest") return {{12, 38, 28}, {120, 238, 156}, {234, 255, 240}, {140, 180, 150}};
+	if (n == "mono")   return {{26, 26, 28}, {232, 232, 232}, {245, 245, 245}, {150, 150, 150}};
+	return {{16, 20, 46}, {93, 240, 255}, {236, 242, 255}, {150, 160, 195}};
+}
+
+// ---------------------------------------------------------------------------
+// State shared between the optional modules
+// ---------------------------------------------------------------------------
+inline bool g_rspFromStartPos = false;  // playing from a StartPos this mod picked (safe mode)
+inline bool g_rspFreezeNext = false;    // the next respawn follows a switch (respawn delay)
+inline void (*g_rspOpenMenu)() = nullptr; // set by menu.cpp if it is compiled in
+
+// ---------------------------------------------------------------------------
+// StartPos stats (in memory while playing, saved when leaving the level)
+// ---------------------------------------------------------------------------
+struct RSPSection {
+	int deaths = 0;
+	float best = 0.f;
+};
+struct RSPLevelStats {
+	std::map<int, RSPSection> sec; // key 1..N = StartPos number
+	bool loaded = false;
+};
+
+inline std::unordered_map<int, RSPLevelStats>& rspStatsMap() {
+	static std::unordered_map<int, RSPLevelStats> m;
+	return m;
+}
+inline std::string rspStatsKey(int id) { return "stats-" + std::to_string(id); }
+
+inline int rspLevelKey(GJGameLevel* lvl) {
+	if (!lvl) return 0;
+	int id = lvl->m_levelID.value();
+	if (id > 0) return id;
+	return -static_cast<int>(std::hash<std::string>{}(std::string(lvl->m_levelName.c_str())) & 0x7fffffff) - 1;
+}
+
+inline RSPLevelStats& rspStatsFor(int id) {
+	auto& s = rspStatsMap()[id];
+	if (!s.loaded) {
+		s.loaded = true;
+		std::string txt = Mod::get()->getSavedValue<std::string>(rspStatsKey(id), "");
+		size_t pos = 0;
+		while (pos < txt.size()) {
+			size_t end = txt.find(';', pos);
+			if (end == std::string::npos) end = txt.size();
+			int k = 0, d = 0;
+			float b = 0.f;
+			if (std::sscanf(txt.substr(pos, end - pos).c_str(), "%d,%d,%f", &k, &d, &b) == 3) {
+				s.sec[k] = RSPSection{d, b};
+			}
+			pos = end + 1;
+		}
+	}
+	return s;
+}
+
+inline void rspStatsSave(int id) {
+	auto it = rspStatsMap().find(id);
+	if (it == rspStatsMap().end() || !it->second.loaded) return;
+	std::string out;
+	char buf[64];
+	for (auto& [k, v] : it->second.sec) {
+		std::snprintf(buf, sizeof(buf), "%d,%d,%.1f;", k, v.deaths, v.best);
+		out += buf;
+	}
+	Mod::get()->setSavedValue<std::string>(rspStatsKey(id), out);
+}
+
+// ---------------------------------------------------------------------------
+// Compatibility warning (other StartPos mods that are turned on)
+// ---------------------------------------------------------------------------
+inline std::vector<std::string> rspConflictingMods() {
+	std::vector<std::string> out;
+	auto low = [](std::string s) {
+		for (auto& c : s) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+		return s;
+	};
+	auto has = [](std::string const& s) {
+		return s.find("startpos") != std::string::npos || s.find("start pos") != std::string::npos ||
+			s.find("start-pos") != std::string::npos || s.find("start_pos") != std::string::npos;
+	};
+	for (auto mod : Loader::get()->getAllMods()) {
+		if (mod == Mod::get() || !mod->isEnabled()) continue;
+		if (has(low(mod->getID())) || has(low(mod->getName()))) out.push_back(mod->getName());
+	}
+	return out;
+}
+
+inline void rspCompatWarn() {
+	auto bad = rspConflictingMods();
+	if (bad.empty()) return;
+	std::string names;
+	for (size_t i = 0; i < bad.size(); i++) names += (i ? ", " : "") + bad[i];
+	std::string body =
+		"<cy>" + names + "</c> is turned on.\n\n"
+		"Random StartPos and other StartPos mods both control where you respawn. "
+		"Running them together can send you to the wrong spot, throw your music out of sync, "
+		"or stop the switching altogether.\n\n"
+		"To fix it, turn that mod off in <cg>Geode > Mods</c> and restart the game.";
+	FLAlertLayer::create("Compatibility warning", body, "Got it")->show();
+}
+
+inline void rspOpenSettings() {
+	if (g_rspOpenMenu) g_rspOpenMenu();
+	else openSettingsPopup(Mod::get());
+	if (rspOpt<bool>("compat-warning")) rspCompatWarn();
+}
