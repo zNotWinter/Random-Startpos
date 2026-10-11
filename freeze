@@ -1,0 +1,52 @@
+// Optional module: the respawn delay.
+// After a switch the game is held for N ms so you can see where you landed,
+// and the music only starts when the hold ends so it stays in sync.
+// If this file ever fails to compile, delete it: the rest of the mod still works.
+#include "rsp.hpp"
+
+#include <Geode/modify/PlayLayer.hpp>
+
+namespace {
+	float s_left = 0.f;         // seconds of hold remaining
+	bool s_musicSkipped = false; // the game tried to start the music during the hold
+}
+
+struct $modify(RSPFreeze, PlayLayer) {
+	void setupHasCompleted() {
+		s_left = 0.f;
+		s_musicSkipped = false;
+		PlayLayer::setupHasCompleted();
+	}
+
+	void resetLevel() {
+		if (g_rspFreezeNext) {
+			g_rspFreezeNext = false;
+			if (rspEnabled()) {
+				int ms = static_cast<int>(rspOpt<int64_t>("respawn-delay"));
+				if (ms > 0) s_left = static_cast<float>(ms) / 1000.f;
+			}
+		}
+		PlayLayer::resetLevel();
+	}
+
+	void startMusic() {
+		if (s_left > 0.f) {
+			s_musicSkipped = true; // started when the hold ends
+			return;
+		}
+		PlayLayer::startMusic();
+	}
+
+	void update(float dt) {
+		if (s_left > 0.f) {
+			s_left -= dt;
+			if (s_left > 0.f) return; // hold: the game does not advance
+			s_left = 0.f;
+			if (s_musicSkipped) {
+				s_musicSkipped = false;
+				PlayLayer::startMusic();
+			}
+		}
+		PlayLayer::update(dt);
+	}
+};
