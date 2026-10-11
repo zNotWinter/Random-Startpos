@@ -1,0 +1,721 @@
+#include "rsp.hpp"
+
+#include <Geode/modify/PlayLayer.hpp>
+#include <Geode/modify/PauseLayer.hpp>
+
+#include <chrono>
+#include <cstdint>
+#include <random>
+#include <set>
+
+// ===========================================================================
+// Helpers
+// ===========================================================================
+namespace {
+	std::mt19937& rspRng() {
+		static std::mt19937 gen = [] {
+			std::random_device rd;
+			unsigned a = rd();
+			unsigned b = rd();
+			unsigned c = rd();
+			unsigned t = static_cast<unsigned>(std::chrono::steady_clock::now().time_since_epoch().count());
+			unsigned p = static_cast<unsigned>(reinterpret_cast<uintptr_t>(&rd));
+			std::seed_seq seq{a, b, c, t, p};
+			return std::mt19937(seq);
+		}();
+		return gen;
+	}
+
+	unsigned fnv1a(std::string const& s) {
+		unsigned h = 2166136261u;
+		for (unsigned char c : s) {
+			h ^= c;
+			h *= 16777619u;
+		}
+		return h;
+	}
+
+	std::set<int> parseExcluded(std::string const& text) {
+		std::set<int> out;
+		int cur = -1;
+		for (char ch : text) {
+			if (ch >= '0' && ch <= '9') {
+				if (cur < 0) cur = 0;
+				cur = cur * 10 + (ch - '0');
+				if (cur > 100000) cur = 100000;
+			} else {
+				if (cur > 0) out.insert(cur);
+				cur = -1;
+			}
+		}
+		if (cur > 0) out.insert(cur);
+		return out;
+	}
+
+	ccColor3B namedColor(std::string const& n, ccColor3B fallback) {
+		if (n == "white") return {255, 255, 255};
+		if (n == "green") return {120, 255, 120};
+		if (n == "yellow") return {255, 230, 90};
+		if (n == "red") return {255, 100, 100};
+		if (n == "cyan") return {100, 230, 255};
+		return fallback;
+	}
+
+	CCSequence* fadeSeq(GLubyte op, float hold) {
+		return CCSequence::create(
+			CCFadeTo::create(0.18f, op), CCDelayTime::create(hold), CCFadeTo::create(0.4f, 0), nullptr
+		);
+	}
+
+	// Everything the mod needs, read once per event (never per frame).
+	struct Cfg {
+		std::string trigger = "deaths", mode = "random", style = "off";
+		int deaths = 3, maxDeaths = 5, chance = 40, tolerance = 2, avoid = 2, minPct = 0;
+		int passes = 1, giveUp = 0, clears = 2, delayMs = 200;
+		bool randThreshold = false, loopBuild = true, inclStart = false, onComplete = false;
+		bool clearCp = false, ignorePractice = false, useSeed = false, trackStats = true;
+		std::string seed;
+		bool indicator = true, sound = false, label = true, showTotal = false;
+		float indSize = 0.35f, lblSize = 0.3f;
+		int indOp = 70, lblOp = 60;
+		std::string soundFile = "counter003.ogg", lblPos = "top-left", lblColor = "theme", hudStyle = "pill";
+	};
+
+	Cfg loadCfg() {
+		Cfg c;
+		c.trigger = rspOpt<std::string>("trigger");
+		c.mode = rspOpt<std::string>("mode");
+		c.style = rspOpt<std::string>("practice-style");
+		c.deaths = static_cast<int>(rspOpt<int64_t>("deaths-until-switch"));
+		c.maxDeaths = static_cast<int>(rspOpt<int64_t>("max-deaths"));
+		c.chance = static_cast<int>(rspOpt<int64_t>("chaos-chance"));
+		c.tolerance = static_cast<int>(rspOpt<int64_t>("streak-tolerance"));
+		c.avoid = static_cast<int>(rspOpt<int64_t>("avoid-recent"));
+		c.minPct = static_cast<int>(rspOpt<int64_t>("min-percent"));
+		c.passes = static_cast<int>(rspOpt<int64_t>("passes-needed"));
+		c.giveUp = static_cast<int>(rspOpt<int64_t>("give-up-after"));
+		c.clears = static_cast<int>(rspOpt<int64_t>("clears-needed"));
+		c.delayMs = static_cast<int>(rspOpt<int64_t>("respawn-delay"));
+		c.randThreshold = rspOpt<bool>("random-threshold");
+		c.loopBuild = rspOpt<bool>("loop-build");
+		c.inclStart = rspOpt<bool>("include-level-start");
+		c.onComplete = rspOpt<bool>("switch-on-complete");
+		c.clearCp = rspOpt<bool>("clear-checkpoints");
+		c.ignorePractice = rspOpt<bool>("ignore-practice");
+		c.useSeed = rspOpt<bool>("use-seed");
+		c.trackStats = rspOpt<bool>("track-stats");
+		c.seed = rspOpt<std::string>("seed");
+		c.indicator = rspOpt<bool>("show-indicator");
+		c.indSize = static_cast<float>(rspOpt<double>("indicator-size"));
+		c.indOp = static_cast<int>(rspOpt<int64_t>("indicator-opacity"));
+		c.sound = rspOpt<bool>("play-sound");
+		c.soundFile = rspOpt<std::string>("sound");
+		c.label = rspOpt<bool>("show-label");
+		c.showTotal = rspOpt<bool>("show-total-deaths");
+		c.lblSize = static_cast<float>(rspOpt<double>("label-size"));
+		c.lblOp = static_cast<int>(rspOpt<int64_t>("label-opacity"));
+		c.lblPos = rspOpt<std::string>("label-position");
+		c.lblColor = rspOpt<std::string>("label-color");
+		c.hudStyle = rspOpt<std::string>("hud-style");
+
+		std::string preset = rspOpt<std::string>("preset");
+		if (preset == "practice") {
+			c.trigger = "deaths"; c.mode = "weighted"; c.deaths = 3; c.randThreshold = false; c.avoid = 2; c.style = "off";
+		} else if (preset == "challenge") {
+			c.trigger = "deaths"; c.mode = "shuffle"; c.deaths = 1; c.randThreshold = false; c.style = "off";
+		} else if (preset == "chaos") {
+			c.trigger = "chance"; c.mode = "random"; c.chance = 40; c.avoid = 1; c.style = "off";
+		} else if (preset == "drill") {
+			c.trigger = "streak"; c.mode = "weighted"; c.deaths = 5; c.tolerance = 2; c.avoid = 2; c.style = "off";
+		}
+		return c;
+	}
+}
+
+// ===========================================================================
+// PlayLayer: collect StartPos, detect deaths, switch, safe-guard everything
+// ===========================================================================
+struct $modify(RSPPlayLayer, PlayLayer) {
+	// Run our reset code before other StartPos-related mods look at the StartPos.
+	static void onModify(auto& self) {
+		if (!self.setHookPriorityPre("PlayLayer::resetLevel", Priority::Early)) {
+			log::warn("Random StartPos: could not set resetLevel hook priority");
+		}
+	}
+
+	struct Fields {
+		std::vector<StartPosObject*> starts; // sorted left to right
+		std::vector<StartPosObject*> recent; // nullptr = level start
+		std::vector<StartPosObject*> bag;    // shuffle mode
+		std::unordered_map<StartPosObject*, int> deathsAt;
+		StartPosObject* current = nullptr;   // nullptr = level start
+		StartPosObject* pendingPick = nullptr;
+		bool pending = false;
+		bool applied = false;                // we have set a StartPos at some point
+		bool deathHandled = false;
+		bool suspect = false;                // destroyPlayer ran but the death flag wasn't set yet
+		bool statsDirty = false;
+		bool useSeeded = false;
+		std::chrono::steady_clock::time_point suspectTime{};
+		std::mt19937 seeded;
+		int levelKey = 0;
+		int deathCount = 0, totalDeaths = 0, threshold = 0, streak = 0, direction = 1;
+		int passes = 0, sectionDeaths = 0, clears = 0;
+		float bestPercent = 0.f;
+		CCNode* hud = nullptr;
+		CCScale9Sprite* hudBg = nullptr;
+		CCLabelBMFont* hudLabel = nullptr;
+		CCNode* ind = nullptr;
+		CCScale9Sprite* indBg = nullptr;
+		CCLabelBMFont* indLabel = nullptr;
+		std::string hudKey;
+	};
+
+	// ---- StartPos collection -------------------------------------------
+
+	// Object ID 31 is the StartPos object.
+	void addObject(GameObject* obj) {
+		PlayLayer::addObject(obj);
+		if (obj && obj->m_objectID == 31) {
+			if (auto sp = typeinfo_cast<StartPosObject*>(obj)) {
+				m_fields->starts.push_back(sp);
+			}
+		}
+	}
+
+	void setupHasCompleted() {
+		PlayLayer::setupHasCompleted();
+		g_rspFromStartPos = false;
+		g_rspFreezeNext = false;
+
+		// Fallback: if the hook above saw nothing, look through the level objects.
+		if (m_fields->starts.empty() && m_objects) {
+			for (auto obj : CCArrayExt<GameObject*>(m_objects)) {
+				if (obj && obj->m_objectID == 31) {
+					if (auto sp = typeinfo_cast<StartPosObject*>(obj)) m_fields->starts.push_back(sp);
+				}
+			}
+		}
+		this->rspSortStarts();
+		m_fields->levelKey = rspLevelKey(m_level);
+
+		if (m_fields->starts.empty()) return; // no StartPos here: the mod stays idle for this level
+		if (!rspEnabled()) return;
+
+		auto c = loadCfg();
+		if (c.useSeed && !c.seed.empty()) {
+			m_fields->seeded.seed(fnv1a(c.seed));
+			m_fields->useSeeded = true;
+		}
+		if (rspDebug()) log::info("Random StartPos: found {} StartPos", m_fields->starts.size());
+		this->rspRefreshHud(c);
+	}
+
+	// ---- death detection ------------------------------------------------
+
+	void destroyPlayer(PlayerObject* player, GameObject* obj) {
+		if (!rspEnabled()) {
+			PlayLayer::destroyPlayer(player, obj);
+			return;
+		}
+		bool wasDead = (m_player1 && m_player1->m_isDead) || (m_player2 && m_player2->m_isDead);
+		PlayLayer::destroyPlayer(player, obj);
+		if (wasDead) return;
+		if (obj != nullptr && obj == m_anticheatSpike) return;
+
+		bool isDead = (m_player1 && m_player1->m_isDead) || (m_player2 && m_player2->m_isDead);
+		if (!isDead) {
+			// The flag may be set a moment later: remember it and let resetLevel confirm.
+			m_fields->suspect = true;
+			m_fields->suspectTime = std::chrono::steady_clock::now();
+			return;
+		}
+		m_fields->deathHandled = true;
+		this->rspOnDeath(loadCfg());
+	}
+
+	void resetLevel() {
+		if (!rspEnabled()) {
+			// Mod is off: do nothing except put you back at 0% once if we had moved you.
+			if (m_fields->applied) this->rspClearStartPos();
+			m_fields->deathHandled = false;
+			m_fields->suspect = false;
+			PlayLayer::resetLevel();
+			return;
+		}
+
+		bool diedNow = (m_player1 && m_player1->m_isDead) || (m_player2 && m_player2->m_isDead);
+		bool suspectFresh = m_fields->suspect &&
+			std::chrono::steady_clock::now() - m_fields->suspectTime < std::chrono::seconds(3);
+		if (!m_fields->deathHandled && (diedNow || suspectFresh) && !m_fields->starts.empty()) {
+			this->rspOnDeath(loadCfg()); // safety net: the death wasn't counted yet
+		}
+		m_fields->deathHandled = false;
+		m_fields->suspect = false;
+
+		if (m_fields->pending) {
+			m_fields->pending = false;
+			if (m_isPracticeMode && rspOpt<bool>("clear-checkpoints")) {
+				this->removeAllCheckpoints();
+			}
+			this->setStartPosObject(m_fields->pendingPick);
+		}
+		PlayLayer::resetLevel();
+	}
+
+	void levelComplete() {
+		PlayLayer::levelComplete();
+		if (!rspEnabled() || m_fields->starts.empty()) return;
+		auto c = loadCfg();
+
+		if (c.trackStats && m_fields->current) {
+			auto& sec = rspStatsFor(m_fields->levelKey).sec[this->rspIndexOf(m_fields->current) + 1];
+			sec.best = 100.f;
+			m_fields->statsDirty = true;
+		}
+
+		bool doSwitch = false;
+		if (c.style == "build") {
+			m_fields->clears++;
+			doSwitch = m_fields->clears >= c.clears;
+		} else if (c.style == "beat") {
+			m_fields->passes++;
+			doSwitch = m_fields->passes >= c.passes;
+		} else {
+			doSwitch = c.onComplete;
+		}
+		if (doSwitch) this->rspSwitchStartPos(c);
+		this->rspRefreshHud(c);
+	}
+
+	void onQuit() {
+		g_rspFromStartPos = false;
+		g_rspFreezeNext = false;
+		if (m_fields->statsDirty) {
+			rspStatsSave(m_fields->levelKey);
+			(void)Mod::get()->saveData();
+		}
+		PlayLayer::onQuit();
+	}
+
+	// ---- logic ----------------------------------------------------------
+
+	void rspSortStarts() {
+		auto& s = m_fields->starts;
+		std::sort(s.begin(), s.end(), [](StartPosObject* a, StartPosObject* b) {
+			return a->getPositionX() < b->getPositionX();
+		});
+	}
+
+	int rspIndexOf(StartPosObject* sp) {
+		if (!sp) return -1;
+		auto& s = m_fields->starts;
+		auto it = std::find(s.begin(), s.end(), sp);
+		return it == s.end() ? -1 : static_cast<int>(it - s.begin());
+	}
+
+	StartPosObject* rspSectionOf(float x) {
+		StartPosObject* sec = nullptr;
+		for (auto s : m_fields->starts) {
+			if (s->getPositionX() <= x) sec = s;
+			else break;
+		}
+		return sec;
+	}
+
+	// Did this attempt get past the next StartPos? (the last section needs a level completion)
+	bool rspPassed(float x) {
+		int next = this->rspIndexOf(m_fields->current) + 1;
+		if (next >= static_cast<int>(m_fields->starts.size())) return false;
+		return x >= m_fields->starts[next]->getPositionX();
+	}
+
+	int rspThreshold(Cfg const& c) {
+		if (!c.randThreshold) return c.deaths;
+		if (m_fields->threshold <= 0) {
+			int hi = std::max(c.deaths, c.maxDeaths);
+			std::uniform_int_distribution<int> dist(c.deaths, hi);
+			m_fields->threshold = dist(rspRng());
+		}
+		return m_fields->threshold;
+	}
+
+	void rspOnDeath(Cfg const& c) {
+		if (m_isPracticeMode && c.ignorePractice) return;
+		if (m_fields->starts.empty()) return;
+
+		float percent = this->getCurrentPercent();
+		if (percent < static_cast<float>(c.minPct)) return;
+
+		float x = m_player1 ? m_player1->getPositionX() : 0.f;
+		m_fields->deathsAt[this->rspSectionOf(x)]++;
+		m_fields->totalDeaths++;
+
+		if (c.trackStats && m_fields->current) {
+			auto& sec = rspStatsFor(m_fields->levelKey).sec[this->rspIndexOf(m_fields->current) + 1];
+			sec.deaths++;
+			sec.best = std::max(sec.best, percent);
+			m_fields->statsDirty = true;
+		}
+
+		bool doSwitch = false;
+		if (c.style == "build") {
+			doSwitch = (m_fields->current == nullptr); // first death: jump to the last StartPos
+		} else if (c.style == "beat") {
+			m_fields->sectionDeaths++;
+			if (this->rspPassed(x)) m_fields->passes++;
+			doSwitch = m_fields->passes >= c.passes || (c.giveUp > 0 && m_fields->sectionDeaths >= c.giveUp);
+		} else if (c.trigger == "chance") {
+			std::uniform_int_distribution<int> dist(1, 100);
+			doSwitch = dist(rspRng()) <= c.chance;
+		} else if (c.trigger == "streak") {
+			if (percent > m_fields->bestPercent + static_cast<float>(c.tolerance)) {
+				m_fields->bestPercent = percent; // improving: stay
+				m_fields->streak = 0;
+			} else {
+				m_fields->streak++;
+			}
+			doSwitch = m_fields->streak >= c.deaths;
+		} else {
+			m_fields->deathCount++;
+			doSwitch = m_fields->deathCount >= this->rspThreshold(c); // counter reached zero
+		}
+
+		if (rspDebug()) {
+			log::info("Random StartPos: death at {:.1f}% (switch: {})", percent, doSwitch ? "yes" : "no");
+		}
+		if (doSwitch) this->rspSwitchStartPos(c);
+		this->rspRefreshHud(c);
+	}
+
+	// Picks a new StartPos and applies it. Returns false if there was nothing to pick.
+	bool rspSwitchStartPos(Cfg const& c) {
+		this->rspSortStarts();
+		auto& starts = m_fields->starts;
+		if (starts.empty()) return false;
+
+		auto excluded = parseExcluded(rspOpt<std::string>("excluded"));
+		std::vector<StartPosObject*> order; // nullptr = level start
+		if (c.inclStart) order.push_back(nullptr);
+		for (size_t i = 0; i < starts.size(); i++) {
+			if (excluded.count(static_cast<int>(i) + 1) == 0) order.push_back(starts[i]);
+		}
+		if (order.empty()) return false;
+
+		int n = static_cast<int>(order.size());
+		auto curIt = std::find(order.begin(), order.end(), m_fields->current);
+		int pos = (curIt == order.end()) ? -1 : static_cast<int>(curIt - order.begin());
+		auto& rng = m_fields->useSeeded ? m_fields->seeded : rspRng();
+		auto& recent = m_fields->recent;
+		if (recent.empty()) recent.push_back(m_fields->current);
+		StartPosObject* pick = nullptr;
+
+		if (c.style == "build") {
+			if (pos < 0) pick = order.back();
+			else if (pos > 0) pick = order[pos - 1];
+			else pick = c.loopBuild ? order.back() : order.front();
+		} else if (c.mode == "next") {
+			pick = order[(pos + 1) % n];
+		} else if (c.mode == "previous") {
+			pick = order[(pos < 0) ? n - 1 : (pos - 1 + n) % n];
+		} else if (c.mode == "ping-pong") {
+			int target;
+			if (n == 1) {
+				target = 0;
+			} else if (pos < 0) {
+				target = 0;
+				m_fields->direction = 1;
+			} else {
+				target = pos + m_fields->direction;
+				if (target >= n) { m_fields->direction = -1; target = n - 2; }
+				else if (target < 0) { m_fields->direction = 1; target = 1; }
+			}
+			pick = order[target];
+		} else if (c.mode == "shuffle") {
+			auto& bag = m_fields->bag;
+			bag.erase(std::remove_if(bag.begin(), bag.end(), [&](StartPosObject* o) {
+				return std::find(order.begin(), order.end(), o) == order.end();
+			}), bag.end());
+			if (bag.empty()) {
+				bag = order;
+				std::shuffle(bag.begin(), bag.end(), rng);
+				if (bag.size() > 1 && bag.back() == m_fields->current) std::swap(bag.back(), bag.front());
+			}
+			pick = bag.back();
+			bag.pop_back();
+		} else {
+			// random / weighted: never one of the last few picks
+			size_t avoid = static_cast<size_t>(std::max<int64_t>(
+				0, std::min<int64_t>(c.avoid, static_cast<int64_t>(order.size()) - 1)
+			));
+			avoid = std::min(avoid, recent.size());
+			std::vector<StartPosObject*> candidates;
+			for (auto o : order) {
+				bool bad = false;
+				for (size_t k = 0; k < avoid; k++) {
+					if (recent[recent.size() - 1 - k] == o) { bad = true; break; }
+				}
+				if (!bad) candidates.push_back(o);
+			}
+			if (candidates.empty()) candidates = order;
+
+			if (c.mode == "weighted") {
+				std::vector<double> weights;
+				for (auto o : candidates) {
+					auto it = m_fields->deathsAt.find(o);
+					weights.push_back(1.0 + (it == m_fields->deathsAt.end() ? 0 : it->second));
+				}
+				std::discrete_distribution<size_t> dist(weights.begin(), weights.end());
+				pick = candidates[dist(rspRng())];
+			} else {
+				std::uniform_int_distribution<size_t> dist(0, candidates.size() - 1);
+				pick = candidates[dist(rng)];
+			}
+		}
+
+		recent.push_back(pick);
+		if (recent.size() > 12) recent.erase(recent.begin());
+
+		m_fields->current = pick;
+		m_fields->deathCount = 0;
+		m_fields->threshold = 0;
+		m_fields->streak = 0;
+		m_fields->bestPercent = 0.f;
+		m_fields->passes = 0;
+		m_fields->sectionDeaths = 0;
+		m_fields->clears = 0;
+		m_fields->pendingPick = pick;
+		m_fields->pending = true;
+		m_fields->applied = true;
+		g_rspFromStartPos = (pick != nullptr);
+		g_rspFreezeNext = c.delayMs > 0;
+
+		// Applied right away (it happens during the death animation) and once more
+		// right before the respawn, so a switch can't be missed.
+		this->setStartPosObject(pick);
+
+		int idx = this->rspIndexOf(pick);
+		if (rspDebug()) log::info("Random StartPos: switching to {}", idx >= 0 ? idx + 1 : 0);
+
+		this->rspShowIndicator(
+			pick ? fmt::format("Next: StartPos {}/{}", idx + 1, starts.size()) : std::string("Next: Level start"), c
+		);
+		if (c.sound) FMODAudioEngine::sharedEngine()->playEffect(c.soundFile.c_str());
+		this->rspRefreshHud(c);
+		return true;
+	}
+
+	// Back to the very start of the level (used when the mod is turned off).
+	void rspClearStartPos() {
+		m_fields->applied = false;
+		m_fields->current = nullptr;
+		m_fields->pending = false;
+		g_rspFromStartPos = false;
+		g_rspFreezeNext = false;
+		this->setStartPosObject(nullptr);
+		if (m_fields->hud) m_fields->hud->setVisible(false);
+		if (m_fields->ind) m_fields->ind->setVisible(false);
+	}
+
+	// Called by the pause panel when the mod is switched off. True if a restart is needed.
+	bool rspDisableAndReset() {
+		bool had = m_fields->applied;
+		if (had) this->rspClearStartPos();
+		else {
+			if (m_fields->hud) m_fields->hud->setVisible(false);
+			if (m_fields->ind) m_fields->ind->setVisible(false);
+		}
+		return had;
+	}
+
+	// ---- on-screen pieces (built only when needed, redrawn only on change) --
+
+	void rspMakeBadge(CCNode*& node, CCScale9Sprite*& bg, CCLabelBMFont*& lb, int z) {
+		node = CCNode::create();
+		node->ignoreAnchorPointForPosition(false);
+		bg = CCScale9Sprite::create("square02_001.png");
+		node->addChild(bg, 0);
+		lb = CCLabelBMFont::create("", "bigFont.fnt");
+		node->addChild(lb, 1);
+		this->addChild(node, z);
+	}
+
+	void rspLayoutBadge(CCNode* node, CCScale9Sprite* bg, CCLabelBMFont* lb) {
+		auto sz = lb->getScaledContentSize();
+		CCSize box(sz.width + 22.f, sz.height + 12.f);
+		node->setContentSize(box);
+		bg->setContentSize(box);
+		bg->setPosition({box.width / 2, box.height / 2});
+		lb->setPosition({box.width / 2, box.height / 2});
+	}
+
+	void rspShowIndicator(std::string const& text, Cfg const& c) {
+		if (!c.indicator) return;
+		auto th = rspTheme();
+		if (!m_fields->ind) this->rspMakeBadge(m_fields->ind, m_fields->indBg, m_fields->indLabel, 1001);
+
+		auto lb = m_fields->indLabel;
+		auto bg = m_fields->indBg;
+		lb->setString(text.c_str());
+		lb->setScale(c.indSize);
+		lb->setColor(th.text);
+		bg->setColor(th.panel);
+		this->rspLayoutBadge(m_fields->ind, bg, lb);
+
+		auto win = CCDirector::get()->getWinSize();
+		m_fields->ind->setAnchorPoint({0.5f, 0.5f});
+		m_fields->ind->setPosition({win.width / 2, win.height * 0.17f}); // low on the screen
+		m_fields->ind->setVisible(true);
+
+		GLubyte op = static_cast<GLubyte>(255 * c.indOp / 100);
+		float hold = 0.9f + static_cast<float>(c.delayMs) / 1000.f;
+		bg->stopAllActions();
+		lb->stopAllActions();
+		bg->setOpacity(0);
+		lb->setOpacity(0);
+		bg->runAction(fadeSeq(static_cast<GLubyte>(op * 0.7f), hold));
+		lb->runAction(fadeSeq(op, hold));
+	}
+
+	void rspRefreshHud(Cfg const& c) {
+		bool show = c.label && !m_fields->starts.empty();
+		if (!show) {
+			if (m_fields->hud) m_fields->hud->setVisible(false);
+			return;
+		}
+		auto& starts = m_fields->starts;
+		int idx = this->rspIndexOf(m_fields->current);
+		std::string where = idx >= 0 ? fmt::format("{}/{}", idx + 1, starts.size()) : std::string("Start");
+		std::string status;
+		if (c.style == "build") status = fmt::format("clear {}/{}", m_fields->clears, c.clears);
+		else if (c.style == "beat") status = fmt::format("pass {}/{}", m_fields->passes, c.passes);
+		else if (c.trigger == "chance") status = fmt::format("{}% per death", c.chance);
+		else if (c.trigger == "streak") status = fmt::format("streak {}/{}", m_fields->streak, c.deaths);
+		else status = fmt::format("{} left", std::max(0, this->rspThreshold(c) - m_fields->deathCount));
+		std::string text = fmt::format("StartPos {}  |  {}", where, status);
+		if (c.showTotal) text += fmt::format("  |  deaths {}", m_fields->totalDeaths);
+
+		std::string key = fmt::format("{}#{}#{}#{}#{}#{}#{}", text, c.lblPos, c.lblColor, c.lblSize, c.lblOp, c.hudStyle, rspOpt<std::string>("theme"));
+		if (m_fields->hud && key == m_fields->hudKey && m_fields->hud->isVisible()) return; // unchanged
+		m_fields->hudKey = key;
+
+		if (!m_fields->hud) this->rspMakeBadge(m_fields->hud, m_fields->hudBg, m_fields->hudLabel, 1000);
+		auto th = rspTheme();
+		auto lb = m_fields->hudLabel;
+		auto bg = m_fields->hudBg;
+		GLubyte op = static_cast<GLubyte>(255 * c.lblOp / 100);
+
+		lb->setString(text.c_str());
+		lb->setScale(c.lblSize);
+		lb->setColor(namedColor(c.lblColor, th.accent));
+		lb->setOpacity(op);
+		bg->setColor(th.panel);
+		if (c.hudStyle == "minimal") bg->setOpacity(0);
+		else if (c.hudStyle == "glass") bg->setOpacity(static_cast<GLubyte>(op * 0.3f));
+		else bg->setOpacity(static_cast<GLubyte>(op * 0.65f));
+		this->rspLayoutBadge(m_fields->hud, bg, lb);
+
+		auto win = CCDirector::get()->getWinSize();
+		float m = 8.f;
+		auto hud = m_fields->hud;
+		if (c.lblPos == "top-right") {
+			hud->setAnchorPoint({1.f, 1.f});
+			hud->setPosition({win.width - m, win.height - m});
+		} else if (c.lblPos == "bottom-left") {
+			hud->setAnchorPoint({0.f, 0.f});
+			hud->setPosition({m, m});
+		} else if (c.lblPos == "bottom-right") {
+			hud->setAnchorPoint({1.f, 0.f});
+			hud->setPosition({win.width - m, m});
+		} else {
+			hud->setAnchorPoint({0.f, 1.f});
+			hud->setPosition({m, win.height - m});
+		}
+		hud->setVisible(true);
+	}
+
+	void rspUpdateLabel() {
+		if (rspEnabled()) this->rspRefreshHud(loadCfg());
+	}
+
+	bool rspHasStarts() {
+		return !m_fields->starts.empty();
+	}
+};
+
+// ===========================================================================
+// PauseLayer: one compact panel (on/off checkbox + settings button)
+// ===========================================================================
+struct $modify(RSPPauseLayer, PauseLayer) {
+	void customSetup() {
+		PauseLayer::customSetup();
+		if (!rspOpt<bool>("show-pause-panel")) return;
+
+		auto th = rspTheme();
+		auto win = CCDirector::get()->getWinSize();
+		auto pl = static_cast<RSPPlayLayer*>(PlayLayer::get());
+		bool none = pl && !pl->rspHasStarts();
+
+		std::string where = rspOpt<std::string>("pause-panel-position");
+		float w = 118.f, h = 28.f, margin = 8.f;
+		float cx = (where == "bottom-left" || where == "top-left") ? margin + w / 2 : win.width - margin - w / 2;
+		float cy = (where == "top-left" || where == "top-right") ? win.height - margin - h / 2 : margin + h / 2;
+
+		auto menu = CCMenu::create();
+		menu->setID("random-startpos-menu"_spr);
+		menu->setPosition({cx, cy});
+
+		auto panel = CCScale9Sprite::create("square02_001.png");
+		panel->setContentSize(CCSize(w, h));
+		panel->setColor(th.panel);
+		panel->setOpacity(215);
+		menu->addChild(panel, -1);
+
+		auto toggler = CCMenuItemToggler::createWithStandardSprites(
+			this, menu_selector(RSPPauseLayer::onRSPToggle), 0.5f
+		);
+		toggler->toggle(rspEnabled());
+		toggler->setPosition({-w / 2 + 16.f, 0.f});
+		menu->addChild(toggler);
+
+		auto title = CCLabelBMFont::create(none ? "No StartPos" : "StartPos", "bigFont.fnt");
+		title->setScale(0.34f);
+		title->setAnchorPoint({0.f, 0.5f});
+		title->setPosition({-w / 2 + 31.f, 0.f});
+		title->setColor(none ? th.dim : th.accent);
+		menu->addChild(title);
+
+		CCNode* gear = nullptr;
+		if (CCSpriteFrameCache::sharedSpriteFrameCache()->spriteFrameByName("GJ_optionsBtn02_001.png")) {
+			auto spr = CCSprite::createWithSpriteFrameName("GJ_optionsBtn02_001.png");
+			spr->setScale(0.42f);
+			gear = spr;
+		} else {
+			auto spr = ButtonSprite::create("...");
+			spr->setScale(0.5f);
+			gear = spr;
+		}
+		auto settingsBtn = CCMenuItemSpriteExtra::create(gear, this, menu_selector(RSPPauseLayer::onRSPSettings));
+		settingsBtn->setPosition({w / 2 - 16.f, 0.f});
+		menu->addChild(settingsBtn);
+
+		this->addChild(menu);
+	}
+
+	void onRSPSettings(CCObject*) {
+		rspOpenSettings();
+	}
+
+	void onRSPToggle(CCObject*) {
+		bool now = !rspEnabled();
+		Mod::get()->setSettingValue<bool>("enabled", now);
+		(void)Mod::get()->saveData();
+		auto pl = static_cast<RSPPlayLayer*>(PlayLayer::get());
+		if (!pl) return;
+		if (now) {
+			pl->rspUpdateLabel();
+		} else if (pl->rspDisableAndReset()) {
+			this->onRestart(nullptr); // turned off while on a StartPos: back to 0%
+		}
+	}
+};
