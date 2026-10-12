@@ -77,7 +77,10 @@ protected:
 		auto bg = CCScale9Sprite::create("square02_001.png");
 		bg->setContentSize(CCSize(312.f, 262.f));
 		bg->setColor(th.panel);
-		bg->setOpacity(245);
+		{
+			std::string ms = rspOpt<std::string>("menu-style");
+			bg->setOpacity(ms == "glass" ? 175 : ms == "outline" ? 110 : 245);
+		}
 		bg->setPosition(m_c);
 		m_buttonMenu->addChild(bg, -1);
 		m_nodes.push_back(bg);
@@ -119,6 +122,7 @@ protected:
 			}
 		}
 
+		text(kRSPVersion, 140.f, 124.f, 0.24f, th.dim, {1.f, 0.5f});
 		this->pillButton("Reset", 90.f, 22.f, -60.f, -118.f, menu_selector(RSPStatsPopup::onReset), lift, th.text);
 		this->pillButton("Settings", 90.f, 22.f, 60.f, -118.f, menu_selector(RSPStatsPopup::onSettings), th.accent, th.panel);
 	}
