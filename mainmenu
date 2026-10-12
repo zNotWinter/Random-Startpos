@@ -1,0 +1,43 @@
+// Optional module: an "SP" button on the main menu's bottom bar that opens the
+// Random StartPos menu, so you can reach it without starting a level.
+// If this file ever fails to compile, delete it: the rest of the mod still works.
+#include "rsp.hpp"
+
+#include <Geode/modify/MenuLayer.hpp>
+
+struct $modify(RSPMainMenu, MenuLayer) {
+	bool init() {
+		if (!MenuLayer::init()) return false;
+		if (!rspOpt<bool>("show-main-menu-button")) return true;
+
+		auto bar = typeinfo_cast<CCMenu*>(this->getChildByID("bottom-menu"));
+		if (!bar) return true;
+
+		auto th = rspTheme();
+		float s = 36.f;
+		auto node = CCNode::create();
+		node->setContentSize(CCSize(s, s));
+		node->ignoreAnchorPointForPosition(false);
+		auto bg = CCScale9Sprite::create("square02_001.png");
+		bg->setContentSize(CCSize(s, s));
+		bg->setPosition({s / 2, s / 2});
+		bg->setColor(th.panel);
+		bg->setOpacity(235);
+		node->addChild(bg);
+		auto lb = CCLabelBMFont::create("SP", "bigFont.fnt");
+		lb->setScale(0.5f);
+		lb->setColor(th.accent);
+		lb->setPosition({s / 2, s / 2});
+		node->addChild(lb);
+
+		auto item = CCMenuItemSpriteExtra::create(node, this, menu_selector(RSPMainMenu::onRSPMenu));
+		item->setID("random-startpos-button"_spr);
+		bar->addChild(item);
+		bar->updateLayout();
+		return true;
+	}
+
+	void onRSPMenu(CCObject*) {
+		rspOpenSettings();
+	}
+};
