@@ -6,10 +6,10 @@
 		"mac": "2.2081",
 		"ios": "2.2081"
 	},
-	"version": "v1.4.0",
-	"id": "random-startpos",
+	"version": "v1.5.0",
+	"id": "yourname.random-startpos",
 	"name": "Random StartPos",
-	"developer": "zNotWinter",
+	"developer": "YourName",
 	"description": "Switches to a random StartPos every N deaths.",
 	"tags": [
 		"gameplay",
@@ -51,6 +51,17 @@
 				"sunset",
 				"forest",
 				"mono"
+			]
+		},
+		"menu-style": {
+			"type": "string",
+			"name": "Menu Style",
+			"description": "solid = opaque panel. glass = see-through panel. outline = very light panel. Applies to the in-game menu and the stats popup.",
+			"default": "solid",
+			"one-of": [
+				"solid",
+				"glass",
+				"outline"
 			]
 		},
 		"title-trigger": {
@@ -156,8 +167,8 @@
 		"clear-checkpoints": {
 			"type": "bool",
 			"name": "Clear Checkpoints On Switch",
-			"description": "Practice mode: remove checkpoints when a switch happens so the new StartPos applies. Off by default because removing checkpoints can affect practice music sync.",
-			"default": false,
+			"description": "Practice mode: remove checkpoints when a switch happens so the new StartPos applies. Without this, a checkpoint overrides the StartPos and nothing seems to change. Turn it off if you want to keep checkpoints.",
+			"default": true,
 			"enable-if": "enabled"
 		},
 		"switch-on-complete": {
@@ -183,6 +194,20 @@
 				"slider": true,
 				"arrows": true
 			},
+			"enable-if": "enabled"
+		},
+		"hold-music": {
+			"type": "bool",
+			"name": "Hold Music During Delay",
+			"description": "Keep the music from starting until the respawn delay is over, so it stays in sync with the level.",
+			"default": true,
+			"enable-if": "enabled"
+		},
+		"reset-on-disable": {
+			"type": "bool",
+			"name": "Return To 0% When Turned Off",
+			"description": "When you turn the mod off, put your next respawn back at the very start of the level if the mod had moved you to a StartPos.",
+			"default": true,
 			"enable-if": "enabled"
 		},
 		"title-pick": {
@@ -351,6 +376,33 @@
 			},
 			"enable-if": "show-indicator"
 		},
+		"indicator-height": {
+			"type": "int",
+			"name": "Indicator Height (%)",
+			"description": "How far up the screen the switch indicator sits. Low numbers are lower down. Default 17.",
+			"default": 17,
+			"min": 5,
+			"max": 60,
+			"control": {
+				"input": true,
+				"slider": true,
+				"arrows": true
+			},
+			"enable-if": "show-indicator"
+		},
+		"indicator-hold": {
+			"type": "float",
+			"name": "Indicator Hold Time",
+			"description": "How long the switch indicator stays visible, in seconds (the respawn delay is added on top).",
+			"default": 0.9,
+			"min": 0.3,
+			"max": 3.0,
+			"control": {
+				"input": true,
+				"slider": true
+			},
+			"enable-if": "show-indicator"
+		},
 		"play-sound": {
 			"type": "bool",
 			"name": "Play Sound On Switch",
@@ -494,6 +546,12 @@
 			"type": "bool",
 			"name": "Show Pause Panel",
 			"description": "The small panel in the pause menu with the on/off checkbox and a settings button.",
+			"default": true
+		},
+		"show-main-menu-button": {
+			"type": "bool",
+			"name": "Main Menu Button",
+			"description": "Adds an 'SP' button to the bottom bar of the main menu that opens the Random StartPos menu.",
 			"default": true
 		},
 		"pause-panel-position": {
