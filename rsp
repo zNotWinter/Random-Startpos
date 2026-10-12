@@ -14,6 +14,8 @@
 
 using namespace geode::prelude;
 
+inline constexpr char const* kRSPVersion = "v1.5.0";
+
 // ---------------------------------------------------------------------------
 // Settings helpers
 // ---------------------------------------------------------------------------
@@ -142,7 +144,16 @@ inline void rspCompatWarn() {
 }
 
 inline void rspOpenSettings() {
-	if (g_rspOpenMenu) g_rspOpenMenu();
-	else openSettingsPopup(Mod::get());
+	if (g_rspOpenMenu) {
+		g_rspOpenMenu();
+	} else {
+		FLAlertLayer::create(
+			"In-game menu missing",
+			"The Random StartPos in-game menu is not part of this build (menu.cpp is missing or failed to build), "
+			"so Geode's own settings page is opening instead.",
+			"OK"
+		)->show();
+		openSettingsPopup(Mod::get());
+	}
 	if (rspOpt<bool>("compat-warning")) rspCompatWarn();
 }
