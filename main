@@ -77,7 +77,8 @@ namespace {
 		std::string seed;
 		bool indicator = true, sound = false, label = true, showTotal = false;
 		float indSize = 0.35f, lblSize = 0.3f;
-		int indOp = 70, lblOp = 60;
+		int indOp = 70, lblOp = 60, indHeight = 17;
+		float indHold = 0.9f;
 		std::string soundFile = "counter003.ogg", lblPos = "top-left", lblColor = "theme", hudStyle = "pill";
 	};
 
@@ -108,6 +109,8 @@ namespace {
 		c.indicator = rspOpt<bool>("show-indicator");
 		c.indSize = static_cast<float>(rspOpt<double>("indicator-size"));
 		c.indOp = static_cast<int>(rspOpt<int64_t>("indicator-opacity"));
+		c.indHeight = static_cast<int>(rspOpt<int64_t>("indicator-height"));
+		c.indHold = static_cast<float>(rspOpt<double>("indicator-hold"));
 		c.sound = rspOpt<bool>("play-sound");
 		c.soundFile = rspOpt<std::string>("sound");
 		c.label = rspOpt<bool>("show-label");
@@ -145,6 +148,7 @@ struct $modify(RSPPlayLayer, PlayLayer) {
 
 	struct Fields {
 		std::vector<StartPosObject*> starts; // sorted left to right
+		std::vector<Ref<StartPosObject>> keep; // keeps every StartPos alive so the pointers never dangle
 		std::vector<StartPosObject*> recent; // nullptr = level start
 		std::vector<StartPosObject*> bag;    // shuffle mode
 		std::unordered_map<StartPosObject*, int> deathsAt;
@@ -173,14 +177,20 @@ struct $modify(RSPPlayLayer, PlayLayer) {
 
 	// ---- StartPos collection -------------------------------------------
 
-	// Object ID 31 is the StartPos object.
+	// Object ID 31 is the StartPos object. Recorded BEFORE the game's own addObject
+	// (the game may drop StartPos it doesn't need) and retained so the pointer stays valid.
 	void addObject(GameObject* obj) {
-		PlayLayer::addObject(obj);
 		if (obj && obj->m_objectID == 31) {
-			if (auto sp = typeinfo_cast<StartPosObject*>(obj)) {
-				m_fields->starts.push_back(sp);
-			}
+			if (auto sp = typeinfo_cast<StartPosObject*>(obj)) this->rspAddStart(sp);
 		}
+		PlayLayer::addObject(obj);
+	}
+
+	void rspAddStart(StartPosObject* sp) {
+		auto& s = m_fields->starts;
+		if (std::find(s.begin(), s.end(), sp) != s.end()) return;
+		s.push_back(sp);
+		m_fields->keep.push_back(Ref<StartPosObject>(sp));
 	}
 
 	void setupHasCompleted() {
@@ -188,11 +198,11 @@ struct $modify(RSPPlayLayer, PlayLayer) {
 		g_rspFromStartPos = false;
 		g_rspFreezeNext = false;
 
-		// Fallback: if the hook above saw nothing, look through the level objects.
-		if (m_fields->starts.empty() && m_objects) {
+		// Second source: look through every level object and merge anything the hook missed.
+		if (m_objects) {
 			for (auto obj : CCArrayExt<GameObject*>(m_objects)) {
 				if (obj && obj->m_objectID == 31) {
-					if (auto sp = typeinfo_cast<StartPosObject*>(obj)) m_fields->starts.push_back(sp);
+					if (auto sp = typeinfo_cast<StartPosObject*>(obj)) this->rspAddStart(sp);
 				}
 			}
 		}
@@ -237,7 +247,7 @@ struct $modify(RSPPlayLayer, PlayLayer) {
 	void resetLevel() {
 		if (!rspEnabled()) {
 			// Mod is off: do nothing except put you back at 0% once if we had moved you.
-			if (m_fields->applied) this->rspClearStartPos();
+			if (m_fields->applied && rspOpt<bool>("reset-on-disable")) this->rspClearStartPos();
 			m_fields->deathHandled = false;
 			m_fields->suspect = false;
 			PlayLayer::resetLevel();
@@ -519,7 +529,7 @@ struct $modify(RSPPlayLayer, PlayLayer) {
 
 	// Called by the pause panel when the mod is switched off. True if a restart is needed.
 	bool rspDisableAndReset() {
-		bool had = m_fields->applied;
+		bool had = m_fields->applied && rspOpt<bool>("reset-on-disable");
 		if (had) this->rspClearStartPos();
 		else {
 			if (m_fields->hud) m_fields->hud->setVisible(false);
@@ -564,11 +574,11 @@ struct $modify(RSPPlayLayer, PlayLayer) {
 
 		auto win = CCDirector::get()->getWinSize();
 		m_fields->ind->setAnchorPoint({0.5f, 0.5f});
-		m_fields->ind->setPosition({win.width / 2, win.height * 0.17f}); // low on the screen
+		m_fields->ind->setPosition({win.width / 2, win.height * static_cast<float>(c.indHeight) / 100.f}); // low on the screen
 		m_fields->ind->setVisible(true);
 
 		GLubyte op = static_cast<GLubyte>(255 * c.indOp / 100);
-		float hold = 0.9f + static_cast<float>(c.delayMs) / 1000.f;
+		float hold = c.indHold + static_cast<float>(c.delayMs) / 1000.f;
 		bg->stopAllActions();
 		lb->stopAllActions();
 		bg->setOpacity(0);
