@@ -6,7 +6,7 @@
 		"mac": "2.2081",
 		"ios": "2.2081"
 	},
-	"version": "v1.5.0",
+	"version": "v1.6.0",
 	"id": "yourname.random-startpos",
 	"name": "Random StartPos",
 	"developer": "YourName",
@@ -23,7 +23,7 @@
 		"enabled": {
 			"type": "bool",
 			"name": "Enable Random StartPos",
-			"description": "Master switch. When off the mod does no work at all, and your next respawn goes back to 0% if the mod had moved you to a StartPos. On levels with no StartPos the mod idles by itself and wakes up on the next level.",
+			"description": "Master switch. When off the mod does no work at all, and (if 'Return To 0% When Turned Off' is on) your next respawn goes back to 0% when the mod had moved you to a StartPos. On levels with no StartPos the mod idles by itself.",
 			"default": true
 		},
 		"preset": {
@@ -43,7 +43,7 @@
 		"theme": {
 			"type": "string",
 			"name": "Theme",
-			"description": "Colour scheme for the pause panel, label, switch indicator, stats popup and the in-game menu.",
+			"description": "Colour scheme for the pause panel, switch indicator, stats popup and the in-game menu.",
 			"default": "midnight",
 			"one-of": [
 				"midnight",
@@ -53,16 +53,12 @@
 				"mono"
 			]
 		},
-		"menu-style": {
-			"type": "string",
-			"name": "Menu Style",
-			"description": "solid = opaque panel. glass = see-through panel. outline = very light panel. Applies to the in-game menu and the stats popup.",
-			"default": "solid",
-			"one-of": [
-				"solid",
-				"glass",
-				"outline"
-			]
+		"switch-on-complete": {
+			"type": "bool",
+			"name": "Switch On Level Complete",
+			"description": "Also pick a new StartPos when you beat the level.",
+			"default": false,
+			"enable-if": "enabled"
 		},
 		"title-trigger": {
 			"type": "title",
@@ -71,7 +67,7 @@
 		"trigger": {
 			"type": "string",
 			"name": "Switch Trigger",
-			"description": "deaths = after a number of deaths. chance = random chance on every death. streak = when you stop improving on a StartPos.",
+			"description": "deaths = after a number of deaths. chance = random chance on every death. streak = when you stop improving on a StartPos. Every death is counted.",
 			"default": "deaths",
 			"one-of": [
 				"deaths",
@@ -97,7 +93,7 @@
 		"random-threshold": {
 			"type": "bool",
 			"name": "Randomize Death Count",
-			"description": "Pick a random number between 'Deaths Until Switch' and 'Max Deaths' before each switch, so you can't predict it.",
+			"description": "Pick a random number between 'Deaths Until Switch' and 'Max Deaths' before each switch.",
 			"default": false,
 			"enable-if": "enabled"
 		},
@@ -143,73 +139,6 @@
 			},
 			"enable-if": "enabled"
 		},
-		"min-percent": {
-			"type": "int",
-			"name": "Only Count Deaths After %",
-			"description": "Deaths before this level percentage are ignored. 0 counts every death.",
-			"default": 0,
-			"min": 0,
-			"max": 99,
-			"control": {
-				"input": true,
-				"slider": true,
-				"arrows": true
-			},
-			"enable-if": "enabled"
-		},
-		"ignore-practice": {
-			"type": "bool",
-			"name": "Disable In Practice Mode",
-			"description": "Stop counting deaths in practice mode (checkpoints override StartPos there).",
-			"default": false,
-			"enable-if": "enabled"
-		},
-		"clear-checkpoints": {
-			"type": "bool",
-			"name": "Clear Checkpoints On Switch",
-			"description": "Practice mode: remove checkpoints when a switch happens so the new StartPos applies. Without this, a checkpoint overrides the StartPos and nothing seems to change. Turn it off if you want to keep checkpoints.",
-			"default": true,
-			"enable-if": "enabled"
-		},
-		"switch-on-complete": {
-			"type": "bool",
-			"name": "Switch On Level Complete",
-			"description": "Also pick a new StartPos when you beat the level.",
-			"default": false,
-			"enable-if": "enabled"
-		},
-		"title-timing": {
-			"type": "title",
-			"name": "Respawn Delay"
-		},
-		"respawn-delay": {
-			"type": "int",
-			"name": "Respawn Delay (ms)",
-			"description": "After a switch the game freezes for this long so you can see where you landed before your icon moves. The music starts when the freeze ends, so it stays in sync. 0 turns the delay off.",
-			"default": 200,
-			"min": 0,
-			"max": 1500,
-			"control": {
-				"input": true,
-				"slider": true,
-				"arrows": true
-			},
-			"enable-if": "enabled"
-		},
-		"hold-music": {
-			"type": "bool",
-			"name": "Hold Music During Delay",
-			"description": "Keep the music from starting until the respawn delay is over, so it stays in sync with the level.",
-			"default": true,
-			"enable-if": "enabled"
-		},
-		"reset-on-disable": {
-			"type": "bool",
-			"name": "Return To 0% When Turned Off",
-			"description": "When you turn the mod off, put your next respawn back at the very start of the level if the mod had moved you to a StartPos.",
-			"default": true,
-			"enable-if": "enabled"
-		},
 		"title-pick": {
 			"type": "title",
 			"name": "Which StartPos"
@@ -232,7 +161,7 @@
 		"avoid-recent": {
 			"type": "int",
 			"name": "Avoid Recent Picks",
-			"description": "random / weighted: never pick any of the last N StartPos again. 0 allows repeats. Default 2 keeps the picks from clustering.",
+			"description": "random / weighted: never pick any of the last N StartPos again. 0 allows repeats. Default 2.",
 			"default": 2,
 			"min": 0,
 			"max": 10,
@@ -261,7 +190,7 @@
 		"use-seed": {
 			"type": "bool",
 			"name": "Seeded Sequence",
-			"description": "Same seed gives the same StartPos order every time (random and shuffle modes). Great for fair races and replaying a challenge.",
+			"description": "Same seed gives the same StartPos order every time (random and shuffle modes).",
 			"default": false,
 			"enable-if": "enabled"
 		},
@@ -379,7 +308,7 @@
 		"indicator-height": {
 			"type": "int",
 			"name": "Indicator Height (%)",
-			"description": "How far up the screen the switch indicator sits. Low numbers are lower down. Default 17.",
+			"description": "How far up the screen the indicator sits. Low numbers are lower down. Default 17.",
 			"default": 17,
 			"min": 5,
 			"max": 60,
@@ -393,8 +322,8 @@
 		"indicator-hold": {
 			"type": "float",
 			"name": "Indicator Hold Time",
-			"description": "How long the switch indicator stays visible, in seconds (the respawn delay is added on top).",
-			"default": 0.9,
+			"description": "How long the indicator stays visible, in seconds.",
+			"default": 1.2,
 			"min": 0.3,
 			"max": 3.0,
 			"control": {
@@ -430,7 +359,7 @@
 		"show-label": {
 			"type": "bool",
 			"name": "Show On-Screen Label",
-			"description": "Shows the current StartPos and the trigger status while you play.",
+			"description": "The classic label: the current StartPos and how many deaths are left until the next switch.",
 			"default": true,
 			"enable-if": "enabled"
 		},
@@ -478,10 +407,10 @@
 			"type": "string",
 			"name": "Label Color",
 			"description": "theme uses your theme's accent colour.",
-			"default": "theme",
+			"default": "white",
 			"one-of": [
-				"theme",
 				"white",
+				"theme",
 				"green",
 				"yellow",
 				"red",
@@ -489,22 +418,10 @@
 			],
 			"enable-if": "show-label"
 		},
-		"hud-style": {
-			"type": "string",
-			"name": "Label Style",
-			"description": "pill = solid rounded background. glass = see-through background. minimal = text only.",
-			"default": "pill",
-			"one-of": [
-				"pill",
-				"glass",
-				"minimal"
-			],
-			"enable-if": "show-label"
-		},
 		"show-total-deaths": {
 			"type": "bool",
 			"name": "Label: Show Total Deaths",
-			"description": "Add a session death counter to the label.",
+			"description": "Add a session death counter to the label (every death is counted).",
 			"default": false,
 			"enable-if": "show-label"
 		},
@@ -542,16 +459,21 @@
 			"type": "title",
 			"name": "Interface"
 		},
+		"menu-style": {
+			"type": "string",
+			"name": "Menu Style",
+			"description": "solid = opaque panel. glass = see-through panel. outline = very light panel. Applies to the in-game menu and the stats popup.",
+			"default": "solid",
+			"one-of": [
+				"solid",
+				"glass",
+				"outline"
+			]
+		},
 		"show-pause-panel": {
 			"type": "bool",
 			"name": "Show Pause Panel",
-			"description": "The small panel in the pause menu with the on/off checkbox and a settings button.",
-			"default": true
-		},
-		"show-main-menu-button": {
-			"type": "bool",
-			"name": "Main Menu Button",
-			"description": "Adds an 'SP' button to the bottom bar of the main menu that opens the Random StartPos menu.",
+			"description": "The small panel in the pause menu with the on/off checkbox and a Menu button.",
 			"default": true
 		},
 		"pause-panel-position": {
@@ -567,16 +489,32 @@
 			],
 			"enable-if": "show-pause-panel"
 		},
+		"show-main-menu-button": {
+			"type": "bool",
+			"name": "Main Menu Button",
+			"description": "Adds an 'SP' button to the main menu that opens the Random StartPos menu.",
+			"default": true
+		},
+		"title-safety": {
+			"type": "title",
+			"name": "Safety"
+		},
+		"reset-on-disable": {
+			"type": "bool",
+			"name": "Return To 0% When Turned Off",
+			"description": "When you turn the mod off, put your next respawn back at the very start of the level if the mod had moved you to a StartPos.",
+			"default": true
+		},
 		"compat-warning": {
 			"type": "bool",
 			"name": "Compatibility Warning",
-			"description": "Warn when you open the settings if another StartPos mod (such as StartPos Switcher or Smart StartPos) is turned on.",
+			"description": "When you enter a level, warn if another StartPos mod (Smart StartPos, StartPos Switcher) may be on, because they fight over where you respawn.",
 			"default": true
 		},
 		"debug-log": {
 			"type": "bool",
 			"name": "Debug Log",
-			"description": "Writes short lines to the Geode log when deaths are detected and StartPos are switched. Send the log if something doesn't work.",
+			"description": "Writes short lines to the Geode log when StartPos are found, deaths are detected and StartPos are switched. Turn it on and send the log if something doesn't work.",
 			"default": false
 		}
 	}
