@@ -1,4 +1,3 @@
-Changelog
 v1.0.0
 Initial release
 Switches to a random StartPos after you die
@@ -6,56 +5,48 @@ Setting for how many deaths before it switches
 On/off toggle
 v1.1.0
 Switch modes: random, next, previous
-Randomized death count (a range between a minimum and a maximum)
-Avoid repeats, and an excluded StartPos list
-Option to include the level start as a spawn
-Only count deaths after a chosen level percentage
-Option to disable in practice mode
+Randomized death count
+Avoid repeats, excluded StartPos list, include level start
 Popup and sound when the StartPos changes
 On-screen label
-Pause menu buttons: settings, switch now, on/off toggle
+Pause menu buttons
 v1.2.0
-More reliable auto-switching: the new StartPos is applied right before every respawn, with a backup death counter
+More reliable auto-switching
 New mode: ping-pong
 Switch on level complete
-Clear practice checkpoints on switch
-Choice of switch sound and popup duration
-Label color, size and an optional total death counter
+Sound choice and popup duration
+Label color, size and total death counter
 v1.3.0
-New pick modes: shuffle (every StartPos once before repeating) and weighted (favors the sections you die in most)
-New triggers: chance (random chance per death) and streak (switch when you stop improving)
+New pick modes: shuffle and weighted
+New triggers: chance and streak
 Presets: practice, challenge, chaos, drill
-Label and popup turned off by default
-Performance work: new StartPos applied once, settings read once per event, label redrawn only when its text changes
-Better compatibility with other StartPos mods
-Compact pause panel with an on/off checkbox and settings button ("Switch Now" removed)
-Settings grouped into sections, with dependent options greyed out
-"Clear checkpoints on switch" now off by default
-New logo
+Compact pause panel
+Settings grouped into sections
 v1.4.0
-More reliable death detection (three independent signals), and the new StartPos is applied at death and again at respawn
-Fallback scan for StartPos if the normal hook finds none
-Default deaths until switch is now 3
-Mod off means no processing, and turning it off from the pause panel puts you back at 0%
-Levels with no StartPos: the mod idles for that level only and wakes up on the next one
-Safe mode: playing from a StartPos never counts as a new best and never shows the new-best popup
-Respawn delay (default 200 ms): the game holds still after a switch and the music starts when it ends
-Subtle switch indicator low on the screen as you die (on by default), replacing the old popup
-Label on by default at size 0.3, with three styles (pill, glass, minimal)
-Random mode avoids the last 2 picks by default
-New practice styles: beat to advance and build-up runs
+Default deaths until switch is 3
+Mod off means no processing
+Switch indicator ("Next: StartPos") as you die
+Practice styles: beat to advance, build-up runs
 Seeded sequences
-StartPos stats (deaths and best run per StartPos) with a button on the level page
-In-game tabbed settings menu with info buttons, 5 themes and automatic saving
-Compatibility warning when another StartPos mod is turned on
+StartPos stats with a button on the level page
+In-game tabbed menu with info buttons and 5 themes
+Compatibility warning
 Debug log option
+(A respawn delay was added here and removed again in v1.6)
 v1.5.0
-Fixed: StartPos objects are now kept alive by the mod, so a StartPos the game discards can no longer leave a dangling pointer (this could make the mod do nothing on some levels)
-Fixed: StartPos are now collected from two sources (the add-object hook and a scan of every level object) and merged
-Fixed: the respawn-delay hold now ends on a real timer and is applied to the right game function, so it can no longer block the music
-Clear checkpoints on switch is now on by default (a practice checkpoint otherwise overrides the StartPos)
-In-game menu rebuilt with 9 categories: General, Triggers, Pick, Practice, Alerts, Label, Stats, Style, Safety
-New options: hold music during delay, return to 0% when turned off, indicator height, indicator hold time, menu style (solid / glass / outline), main menu button
-New "SP" button on the main menu's bottom bar that opens the menu
-Opening settings now says so if the in-game menu is missing from the build, instead of silently showing Geode's page
-The version number is shown in the menu and stats popup so you can confirm which build you are running
+In-game menu rebuilt with 9 categories
+Menu style option (solid, glass, outline)
+Main menu button
+Version number shown in the menu
+v1.6.0
+Every death is now counted, always (the "only count after %" and "disable in practice mode" options are gone)
+Death detection no longer depends on the game's dead flag, so switching keeps working after the first switch and when you are not playing from 0%
+Better StartPos finding: three independent sources are merged, and every StartPos is kept alive so the mod can never point at a StartPos the game threw away
+The label now says "none found" if a level's StartPos can't be found, so you can see what the mod sees
+The classic on-screen label is back (plain text), replacing the pill label
+Safe mode reworked: any run that starts from a StartPos (the mod's or another mod's) is protected, progress is never saved, and a new best is not recognised
+Entering a level warns you if Smart StartPos or StartPos Switcher may be on, because they are incompatible
+The pause panel's gear is replaced by a "Menu" button that opens the new in-game menu
+Main menu "SP" button now works even when the bottom bar can't be found
+Removed: respawn delay and freeze, hold music, clear checkpoints (checkpoints are never touched)
+Fewer things run per death and per frame
