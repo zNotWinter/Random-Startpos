@@ -1,0 +1,40 @@
+// Optional module: a second, independent way to find StartPos.
+// Every StartPos object the game creates while a level loads is recorded here,
+// no matter how the game adds it to the level. main.cpp merges these with its own list.
+// If this file ever fails to compile, delete it: the other two sources still work.
+#include "rsp.hpp"
+
+#include <Geode/modify/PlayLayer.hpp>
+#include <Geode/modify/StartPosObject.hpp>
+
+struct $modify(RSPCollectObject, StartPosObject) {
+	bool init() {
+		if (!StartPosObject::init()) return false;
+		if (g_rspLoading) g_rspLoaded.push_back(Ref<StartPosObject>(this));
+		return true;
+	}
+};
+
+struct $modify(RSPCollectLayer, PlayLayer) {
+	bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
+		g_rspLoaded.clear();
+		g_rspLoading = true;
+		if (!PlayLayer::init(level, useReplay, dontCreateObjects)) {
+			g_rspLoading = false;
+			return false;
+		}
+		return true;
+	}
+
+	void setupHasCompleted() {
+		g_rspLoading = false; // loading is over; main.cpp reads the list next
+		PlayLayer::setupHasCompleted();
+	}
+
+	void onQuit() {
+		g_rspLoading = false;
+		g_rspLoaded.clear();
+		PlayLayer::onQuit();
+	}
+};
+
