@@ -30,28 +30,24 @@ std::vector<std::string> const kCorners = {"top-left", "top-right", "bottom-left
 std::vector<Page> const& pages() {
 	static std::vector<Page> p = {
 		{"General", {
-			{kToggle, "enabled", "Enable mod", "Master switch. When off, the mod does no work at all. If it had moved you to a StartPos, your next respawn goes back to 0% (see Safety). On levels with no StartPos it stays idle by itself and wakes up on the next level.", 0, 0, 0, {}},
+			{kToggle, "enabled", "Enable mod", "Master switch. When off, the mod does no work at all. If it had moved you to a StartPos, your next respawn goes back to 0% (see Safety). On levels with no StartPos it stays idle by itself.", 0, 0, 0, {}},
 			{kChoice, "preset", "Preset", "Ready-made setups. practice: weighted picks every 3 deaths. challenge: shuffle, every death. chaos: 40% chance per death. drill: stay until you stop improving. custom uses your own settings. A preset overrides trigger, mode and counts while selected.", 0, 0, 0, {"custom", "practice", "challenge", "chaos", "drill"}},
+			{kChoice, "theme", "Theme", "Colour scheme for the pause panel, switch indicator, stats popup and this menu.", 0, 0, 0, {"midnight", "ocean", "sunset", "forest", "mono"}},
 			{kToggle, "switch-on-complete", "Switch on level complete", "Pick a new StartPos when you beat the level from a StartPos.", 0, 0, 0, {}},
-			{kToggle, "ignore-practice", "Disable in practice mode", "Stops counting deaths while in practice mode.", 0, 0, 0, {}},
-			{kToggle, "clear-checkpoints", "Clear checkpoints on switch", "In practice mode a checkpoint overrides the StartPos, so nothing seems to change. This removes the checkpoints when a switch happens so the new StartPos applies. Turn it off if you want to keep them.", 0, 0, 0, {}},
-			{kInt, "respawn-delay", "Respawn delay", "After a switch the game holds still for this long so you can see where you landed before your icon moves. Off turns the delay off. Default 200 ms.", 0, 1500, 50, {}},
-			{kToggle, "hold-music", "Hold music during delay", "Keeps the music from starting until the respawn delay is over, so it stays in sync with the level.", 0, 0, 0, {}},
 		}},
 		{"Triggers", {
-			{kChoice, "trigger", "Trigger", "deaths: switch after a number of deaths. chance: a random chance on every death. streak: switch when you stop improving on the current StartPos.", 0, 0, 0, {"deaths", "chance", "streak"}},
+			{kChoice, "trigger", "Trigger", "deaths: switch after a number of deaths. chance: a random chance on every death. streak: switch when you stop improving on the current StartPos. Every single death is counted.", 0, 0, 0, {"deaths", "chance", "streak"}},
 			{kInt, "deaths-until-switch", "Deaths until switch", "How many deaths before the StartPos changes. The switch happens the moment the counter reaches zero. In streak mode this is how many deaths in a row without beating your best. Default 3.", 1, 100, 1, {}},
 			{kToggle, "random-threshold", "Randomize death count", "Pick a random number between 'Deaths until switch' and 'Max deaths' before each switch, so you can't predict it.", 0, 0, 0, {}},
 			{kInt, "max-deaths", "Max deaths", "Upper limit used when 'Randomize death count' is on.", 1, 100, 1, {}},
 			{kInt, "chaos-chance", "Chance per death", "Chance of switching on each death when the trigger is 'chance'.", 5, 100, 5, {}},
 			{kInt, "streak-tolerance", "Streak tolerance", "Streak trigger: a death must get this many percent farther than your best on the current StartPos to count as improving.", 0, 20, 1, {}},
-			{kInt, "min-percent", "Only count after", "Deaths before this level percentage are ignored. Off counts every death.", 0, 95, 5, {}},
 		}},
 		{"Pick", {
 			{kChoice, "mode", "Pick mode", "random: any StartPos. shuffle: every StartPos once before any repeat. weighted: favors the sections you die in most. next / previous / ping-pong: go through them in order.", 0, 0, 0, {"random", "shuffle", "weighted", "next", "previous", "ping-pong"}},
 			{kInt, "avoid-recent", "Avoid recent picks", "Random and weighted: never pick any of the last N StartPos again, so the same ones don't keep coming up. Off allows repeats. Default 2.", 0, 10, 1, {}},
 			{kToggle, "include-level-start", "Include level start", "Also allow the very beginning of the level (0%) as a possible spawn.", 0, 0, 0, {}},
-			{kToggle, "use-seed", "Seeded sequence", "The same seed gives the same StartPos order every time (random and shuffle modes). Good for fair races and replaying a challenge. The seed text is under Advanced.", 0, 0, 0, {}},
+			{kToggle, "use-seed", "Seeded sequence", "The same seed gives the same StartPos order every time (random and shuffle modes). Good for fair races and replaying a challenge. The seed text is under the Seed / excluded button at the bottom.", 0, 0, 0, {}},
 		}},
 		{"Practice", {
 			{kChoice, "practice-style", "Practice style", "off: use the trigger. beat: stay on a StartPos until you get past the next one. build: start at the last StartPos and move one section earlier after each clear.", 0, 0, 0, {"off", "beat", "build"}},
@@ -65,18 +61,17 @@ std::vector<Page> const& pages() {
 			{kFloat, "indicator-size", "Indicator size", "Text size of the switch indicator.", 0.2, 0.8, 0.05, {}},
 			{kInt, "indicator-opacity", "Indicator opacity", "How visible the indicator is.", 10, 100, 5, {}},
 			{kInt, "indicator-height", "Indicator height", "How far up the screen the indicator sits. Low numbers are lower down. Default 17.", 5, 60, 5, {}},
-			{kFloat, "indicator-hold", "Indicator hold time", "How long the indicator stays visible, in seconds. The respawn delay is added on top.", 0.3, 3.0, 0.1, {}},
+			{kFloat, "indicator-hold", "Indicator hold time", "How long the indicator stays visible, in seconds.", 0.3, 3.0, 0.1, {}},
 			{kToggle, "play-sound", "Play sound on switch", "Play a short sound when the StartPos changes.", 0, 0, 0, {}},
 			{kChoice, "sound", "Switch sound", "Which sound plays on a switch.", 0, 0, 0, {"counter003.ogg", "playSound_01.ogg", "achievement_01.ogg", "quitSound_01.ogg"}},
 		}},
 		{"Label", {
-			{kToggle, "show-label", "On-screen label", "Shows the current StartPos and the trigger status while you play. It is only redrawn when something changes, so it adds no lag.", 0, 0, 0, {}},
+			{kToggle, "show-label", "On-screen label", "The classic label: the current StartPos and how many deaths are left until the next switch. It says 'none found' if the level has no StartPos the mod could find. It is only redrawn when something changes, so it adds no lag.", 0, 0, 0, {}},
 			{kFloat, "label-size", "Label size", "Text size of the label. Default 0.3.", 0.2, 1.0, 0.05, {}},
 			{kInt, "label-opacity", "Label opacity", "How see-through the label is.", 10, 100, 5, {}},
 			{kChoice, "label-position", "Label position", "Which corner of the screen the label sits in.", 0, 0, 0, kCorners},
-			{kChoice, "label-color", "Label color", "theme uses your theme's accent colour.", 0, 0, 0, {"theme", "white", "green", "yellow", "red", "cyan"}},
-			{kChoice, "hud-style", "Label style", "pill: solid rounded background. glass: see-through background. minimal: text only.", 0, 0, 0, {"pill", "glass", "minimal"}},
-			{kToggle, "show-total-deaths", "Show total deaths", "Adds a session death counter to the label.", 0, 0, 0, {}},
+			{kChoice, "label-color", "Label color", "theme uses your theme's accent colour.", 0, 0, 0, {"white", "theme", "green", "yellow", "red", "cyan"}},
+			{kToggle, "show-total-deaths", "Show total deaths", "Adds a death counter to the label. Every death is counted.", 0, 0, 0, {}},
 		}},
 		{"Stats", {
 			{kToggle, "track-stats", "Track StartPos stats", "Counts deaths and best percent only for runs started from a StartPos. Kept in memory while you play and saved once when you leave the level, so it adds no lag.", 0, 0, 0, {}},
@@ -84,15 +79,14 @@ std::vector<Page> const& pages() {
 			{kChoice, "stats-button-position", "Stats button position", "Which corner of the level page holds the stats button. Move it if it overlaps something.", 0, 0, 0, kCorners},
 		}},
 		{"Style", {
-			{kChoice, "theme", "Theme", "Colour scheme for the pause panel, label, switch indicator, stats popup and this menu.", 0, 0, 0, {"midnight", "ocean", "sunset", "forest", "mono"}},
 			{kChoice, "menu-style", "Menu style", "solid: opaque panel. glass: see-through panel. outline: very light panel. Applies to this menu and the stats popup.", 0, 0, 0, {"solid", "glass", "outline"}},
-			{kToggle, "show-pause-panel", "Show pause panel", "The small panel in the pause menu with the on/off checkbox and a settings button.", 0, 0, 0, {}},
+			{kToggle, "show-pause-panel", "Show pause panel", "The small panel in the pause menu with the on/off checkbox and a Menu button.", 0, 0, 0, {}},
 			{kChoice, "pause-panel-position", "Pause panel position", "Which corner of the pause menu holds the panel. Move it if another mod sits there.", 0, 0, 0, kCorners},
-			{kToggle, "show-main-menu-button", "Main menu button", "Adds an SP button to the bottom bar of the main menu that opens this menu.", 0, 0, 0, {}},
+			{kToggle, "show-main-menu-button", "Main menu button", "Adds an SP button to the main menu that opens this menu.", 0, 0, 0, {}},
 		}},
 		{"Safety", {
 			{kToggle, "reset-on-disable", "Return to 0% when off", "When you turn the mod off, your next respawn goes back to the very start of the level if the mod had moved you to a StartPos.", 0, 0, 0, {}},
-			{kToggle, "compat-warning", "Compatibility warning", "Warns you when you open this menu if another StartPos mod (such as StartPos Switcher or Smart StartPos) is turned on, because they can fight over where you respawn.", 0, 0, 0, {}},
+			{kToggle, "compat-warning", "Compatibility warning", "When you enter a level, warns you if another StartPos mod (Smart StartPos, StartPos Switcher) may be on, because they fight over where you respawn.", 0, 0, 0, {}},
 			{kToggle, "debug-log", "Debug log", "Writes short lines to the Geode log when StartPos are found, deaths are detected and StartPos are switched. Turn it on and send the log if something doesn't work.", 0, 0, 0, {}},
 		}},
 	};
@@ -110,10 +104,8 @@ std::string fmtVal(Row const& r) {
 	if (r.kind == kInt) {
 		int64_t v = rspOpt<int64_t>(r.key);
 		if (v == 0 && k == "give-up-after") return "Never";
-		if (v == 0 && (k == "avoid-recent" || k == "min-percent")) return "Off";
-		if (k == "respawn-delay") return v == 0 ? std::string("Off") : fmt::format("{} ms", v);
-		if (k == "chaos-chance" || k == "streak-tolerance" || k == "min-percent" || k == "indicator-opacity" ||
-		    k == "label-opacity" || k == "indicator-height") {
+		if (v == 0 && k == "avoid-recent") return "Off";
+		if (k == "chaos-chance" || k == "streak-tolerance" || k == "indicator-opacity" || k == "label-opacity" || k == "indicator-height") {
 			return fmt::format("{}%", v);
 		}
 		return std::to_string(v);
@@ -122,20 +114,12 @@ std::string fmtVal(Row const& r) {
 	return fmt::format("{:.2f}", rspOpt<double>(r.key));
 }
 
-GLubyte panelOpacity() {
-	std::string s = rspOpt<std::string>("menu-style");
-	if (s == "glass") return 175;
-	if (s == "outline") return 110;
-	return 246;
-}
-
 } // namespace
 
 class RSPMenu : public geode::Popup {
 protected:
 	int m_page = 0;
 	bool m_dirty = false;
-	CCPoint m_c;
 	std::vector<CCNode*> m_chrome, m_content;
 	std::vector<CCScale9Sprite*> m_tabBg;
 	std::vector<CCLabelBMFont*> m_tabLbl;
@@ -144,23 +128,17 @@ protected:
 
 	bool init() {
 		if (!Popup::init(520.f, 300.f)) return false;
-		auto win = CCDirector::get()->getWinSize();
-		m_c = m_buttonMenu->convertToNodeSpace({win.width / 2, win.height / 2});
+		if (m_bgSprite) m_bgSprite->setVisible(false); // our own themed panel replaces it
 		this->buildAll(false);
 		return true;
 	}
 
 	// ---- small builders ----------------------------------------------------
 
-	CCLabelBMFont* text(std::string const& s, float x, float y, float scale, ccColor3B col, CCPoint anchor, std::vector<CCNode*>& bucket) {
-		auto l = CCLabelBMFont::create(s.c_str(), "bigFont.fnt");
-		l->setScale(scale);
-		l->setColor(col);
-		l->setAnchorPoint(anchor);
-		l->setPosition({m_c.x + x, m_c.y + y});
-		m_buttonMenu->addChild(l, 2);
-		bucket.push_back(l);
-		return l;
+	void put(CCNode* n, float x, float y, std::vector<CCNode*>& bucket, int z = 0) {
+		m_buttonMenu->addChildAtPosition(n, Anchor::Center, {x, y});
+		if (z != 0) n->setZOrder(z);
+		bucket.push_back(n);
 	}
 
 	static void fit(CCLabelBMFont* l, float maxW, float scale) {
@@ -186,9 +164,7 @@ protected:
 		node->addChild(l);
 		auto item = CCMenuItemSpriteExtra::create(node, this, sel);
 		item->setTag(tag);
-		item->setPosition({m_c.x + x, m_c.y + y});
-		m_buttonMenu->addChild(item, 3);
-		bucket.push_back(item);
+		this->put(item, x, y, bucket, 3);
 		if (out) *out = l;
 		if (outBg) *outBg = b;
 		return item;
@@ -198,10 +174,10 @@ protected:
 		return {static_cast<GLubyte>(std::min(255, c.r + a)), static_cast<GLubyte>(std::min(255, c.g + a)), static_cast<GLubyte>(std::min(255, c.b + a))};
 	}
 
-	void slideIn(CCNode* n, float delay) {
-		auto p = n->getPosition();
-		n->setPositionX(p.x + 18.f);
-		n->runAction(CCSequence::create(CCDelayTime::create(delay), CCEaseExponentialOut::create(CCMoveTo::create(0.32f, p)), nullptr));
+	void pop(CCNode* n, float delay) {
+		float s = n->getScale();
+		n->setScale(0.01f);
+		n->runAction(CCSequence::create(CCDelayTime::create(delay), CCEaseBackOut::create(CCScaleTo::create(0.26f, s)), nullptr));
 	}
 
 	// ---- layout --------------------------------------------------------------
@@ -216,12 +192,10 @@ protected:
 		auto bg = CCScale9Sprite::create("square02_001.png");
 		bg->setContentSize(CCSize(512.f, 292.f));
 		bg->setColor(th.panel);
-		bg->setOpacity(panelOpacity());
-		bg->setPosition(m_c);
-		m_buttonMenu->addChild(bg, -1);
-		m_chrome.push_back(bg);
+		bg->setOpacity(rspPanelOpacity());
+		this->put(bg, 0.f, 0.f, m_chrome, -1);
 
-		this->text(fmt::format("Random StartPos {}", kRSPVersion), 0.f, 128.f, 0.55f, th.accent, {0.5f, 0.5f}, m_chrome);
+		rspLabel(m_buttonMenu, fmt::format("Random StartPos {}", kRSPVersion), 0.f, 128.f, 0.55f, th.accent, 0, &m_chrome);
 
 		auto const& P = pages();
 		float tw = 54.f, gap = 2.f;
@@ -237,9 +211,9 @@ protected:
 		}
 		this->colorTabs();
 
-		this->pill("Advanced...", 112.f, 20.f, -190.f, -128.f, 0.32f, lighten(th.panel, 26), th.text,
+		this->pill("Seed / excluded", 126.f, 20.f, -185.f, -128.f, 0.3f, lighten(th.panel, 26), th.text,
 		           menu_selector(RSPMenu::onAdvanced), 0, nullptr, nullptr, m_chrome);
-		this->text("Saved automatically", 240.f, -128.f, 0.28f, th.dim, {1.f, 0.5f}, m_chrome);
+		rspLabel(m_buttonMenu, "Saved automatically", 240.f, -128.f, 0.28f, th.dim, 2, &m_chrome);
 
 		this->buildPage(animate);
 	}
@@ -272,15 +246,13 @@ protected:
 
 			std::vector<CCNode*> made;
 			this->pill("?", 16.f, 16.f, -240.f, y, 0.38f, lift, th.accent, menu_selector(RSPMenu::onInfo), idx, nullptr, nullptr, made);
-			this->text(r.label, -224.f, y, 0.38f, th.text, {0.f, 0.5f}, made);
+			rspLabel(m_buttonMenu, r.label, -224.f, y, 0.38f, th.text, 1, &made);
 
 			if (r.kind == kToggle) {
 				auto t = CCMenuItemToggler::createWithStandardSprites(this, menu_selector(RSPMenu::onToggle), 0.55f);
 				t->toggle(rspOpt<bool>(r.key));
 				t->setTag(idx);
-				t->setPosition({m_c.x + 238.f, m_c.y + y});
-				m_buttonMenu->addChild(t, 3);
-				made.push_back(t);
+				this->put(t, 238.f, y, made, 3);
 			} else if (r.kind == kChoice) {
 				CCLabelBMFont* lb = nullptr;
 				this->pill(fmtVal(r), 112.f, 18.f, 178.f, y, 0.32f, lift, th.accent, menu_selector(RSPMenu::onCycle), idx, &lb, nullptr, made);
@@ -288,16 +260,13 @@ protected:
 			} else {
 				this->pill("-", 18.f, 18.f, 142.f, y, 0.5f, lift, th.text, menu_selector(RSPMenu::onStep), idx * 2, nullptr, nullptr, made);
 				this->pill("+", 18.f, 18.f, 234.f, y, 0.5f, lift, th.text, menu_selector(RSPMenu::onStep), idx * 2 + 1, nullptr, nullptr, made);
-				m_vals[i] = this->text(fmtVal(r), 188.f, y, 0.34f, th.accent, {0.5f, 0.5f}, made);
+				m_vals[i] = rspLabel(m_buttonMenu, fmtVal(r), 188.f, y, 0.34f, th.accent, 0, &made);
 			}
 
 			for (auto n : made) {
 				m_content.push_back(n);
-				if (animate) this->slideIn(n, d);
+				if (animate) this->pop(n, d);
 			}
-		}
-		if (m_page == 2) {
-			this->text("Seed text and the excluded list are under Advanced.", 0.f, -60.f, 0.28f, th.dim, {0.5f, 0.5f}, m_content);
 		}
 	}
 
