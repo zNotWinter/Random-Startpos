@@ -1,7 +1,6 @@
 // Optional module: automatic safe mode (not toggleable).
-// While you play from a StartPos picked by this mod, the level is treated as a
-// test run, so a "new best" from the StartPos is never saved and the new-best
-// popup never shows. Your real progress from 0% stays untouched.
+// While you play from a StartPos, the level is treated as a test run, so a new best
+// from the StartPos is never recognised and your progress from 0% stays untouched.
 // If this file ever fails to compile, delete it: the rest of the mod still works.
 #include "rsp.hpp"
 
@@ -19,7 +18,8 @@ struct $modify(RSPSafeMode, PlayLayer) {
 		s_changed = false;
 	}
 
-	void resetLevel() {
+	// Brought up to date right before the game decides about new bests / completions.
+	void rspApplyTestMode() {
 		if (g_rspFromStartPos) {
 			if (!m_isTestMode) {
 				m_isTestMode = true;
@@ -29,6 +29,20 @@ struct $modify(RSPSafeMode, PlayLayer) {
 			m_isTestMode = s_orig;
 			s_changed = false;
 		}
+	}
+
+	void destroyPlayer(PlayerObject* player, GameObject* obj) {
+		this->rspApplyTestMode();
+		PlayLayer::destroyPlayer(player, obj);
+	}
+
+	void levelComplete() {
+		this->rspApplyTestMode();
+		PlayLayer::levelComplete();
+	}
+
+	void resetLevel() {
+		this->rspApplyTestMode();
 		PlayLayer::resetLevel();
 	}
 };
