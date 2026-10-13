@@ -1,14 +1,11 @@
-# Random StartPos
-
-Every time you die, this mod can pick a **random StartPos** from the level for your next attempt.
-
-## Features
-- Toggle the mod on/off
-- Choose how many deaths happen before the StartPos changes
-- Optional: avoid repeats, include the level start, skip practice mode
-- Optional popup showing which StartPos was chosen
-
-## Settings
-Open **Geode > Mods > Random StartPos > Settings**, or press the **StartPos** button in the pause menu.
-
-Levels need at least one StartPos object placed in the editor. Playing from a StartPos is test-mode, so progress is not saved (normal GD behaviour).
+Random StartPos
+Switches to a different StartPos as you die, so you practice every part of a level.
+Triggers: every N deaths (default 3), random chance, or when you stop improving
+Modes: random, shuffle, weighted, next, previous, ping-pong, plus seeded sequences
+Practice styles: beat to advance, build-up runs
+Safe mode: runs from a StartPos never count as a new best
+Respawn delay so you can see where you landed; music starts when you move
+Subtle switch indicator and on-screen label
+StartPos stats on the level page
+Themes, an in-game tabbed settings menu, and info buttons on every option
+Levels need at least one StartPos placed in the editor.
