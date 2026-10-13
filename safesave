@@ -1,0 +1,12 @@
+// Optional module: never save progress from a StartPos run.
+// If this file ever fails to compile, delete it: the rest of the mod still works.
+#include "rsp.hpp"
+
+#include <Geode/modify/GJGameLevel.hpp>
+
+struct $modify(RSPSafeSave, GJGameLevel) {
+	void savePercentage(int percent, bool isPracticeMode, int clicks, int attempts, bool isChkValid) {
+		if (g_rspFromStartPos && !isPracticeMode) return; // a StartPos run must never change your normal progress
+		GJGameLevel::savePercentage(percent, isPracticeMode, clicks, attempts, isChkValid);
+	}
+};
