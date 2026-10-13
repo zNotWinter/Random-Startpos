@@ -7,41 +7,30 @@
 
 class RSPStatsPopup : public geode::Popup {
 protected:
-	CCPoint m_c;
 	std::vector<CCNode*> m_nodes;
 	std::string m_name;
 	int m_key = 0;
 
 	bool init(GJGameLevel* level) {
 		if (!Popup::init(320.f, 270.f)) return false;
+		if (m_bgSprite) m_bgSprite->setVisible(false);
 		m_key = rspLevelKey(level);
 		m_name = level ? std::string(level->m_levelName.c_str()) : std::string("Level");
-		auto win = CCDirector::get()->getWinSize();
-		m_c = m_buttonMenu->convertToNodeSpace({win.width / 2, win.height / 2});
 		this->build();
 		return true;
 	}
 
-	CCLabelBMFont* text(std::string const& s, float x, float y, float scale, ccColor3B col, CCPoint anchor = {0.5f, 0.5f}) {
-		auto l = CCLabelBMFont::create(s.c_str(), "bigFont.fnt");
-		l->setScale(scale);
-		l->setColor(col);
-		l->setAnchorPoint(anchor);
-		l->setPosition({m_c.x + x, m_c.y + y});
-		m_buttonMenu->addChild(l, 2);
-		m_nodes.push_back(l);
-		return l;
+	void put(CCNode* n, float x, float y, int z = 0) {
+		m_buttonMenu->addChildAtPosition(n, Anchor::Center, {x, y});
+		if (z != 0) n->setZOrder(z);
+		m_nodes.push_back(n);
 	}
 
-	void bar(float left, float y, float w, float h, ccColor3B col, GLubyte op) {
+	void bar(float left, float y, float w, float h, ccColor3B col) {
 		auto b = CCScale9Sprite::create("square02_001.png");
 		b->setContentSize(CCSize(w, h));
-		b->setAnchorPoint({0.f, 0.5f});
 		b->setColor(col);
-		b->setOpacity(op);
-		b->setPosition({m_c.x + left, m_c.y + y});
-		m_buttonMenu->addChild(b, 1);
-		m_nodes.push_back(b);
+		this->put(b, left + w / 2, y, 1);
 	}
 
 	void pillButton(std::string const& t, float w, float h, float x, float y, SEL_MenuHandler sel, ccColor3B bg, ccColor3B tc) {
@@ -59,9 +48,7 @@ protected:
 		l->setPosition({w / 2, h / 2});
 		node->addChild(l);
 		auto item = CCMenuItemSpriteExtra::create(node, this, sel);
-		item->setPosition({m_c.x + x, m_c.y + y});
-		m_buttonMenu->addChild(item, 3);
-		m_nodes.push_back(item);
+		this->put(item, x, y, 3);
 	}
 
 	void build() {
@@ -77,21 +64,17 @@ protected:
 		auto bg = CCScale9Sprite::create("square02_001.png");
 		bg->setContentSize(CCSize(312.f, 262.f));
 		bg->setColor(th.panel);
-		{
-			std::string ms = rspOpt<std::string>("menu-style");
-			bg->setOpacity(ms == "glass" ? 175 : ms == "outline" ? 110 : 245);
-		}
-		bg->setPosition(m_c);
-		m_buttonMenu->addChild(bg, -1);
-		m_nodes.push_back(bg);
+		bg->setOpacity(rspPanelOpacity());
+		this->put(bg, 0.f, 0.f, -1);
 
-		text("StartPos stats", 0.f, 116.f, 0.62f, th.accent);
-		text(m_name, 0.f, 98.f, 0.34f, th.dim);
+		rspLabel(m_buttonMenu, "StartPos stats", 0.f, 116.f, 0.62f, th.accent, 0, &m_nodes);
+		rspLabel(m_buttonMenu, m_name, 0.f, 98.f, 0.34f, th.dim, 0, &m_nodes);
+		rspLabel(m_buttonMenu, kRSPVersion, 140.f, 124.f, 0.24f, th.dim, 2, &m_nodes);
 
 		if (st.sec.empty()) {
-			text("No StartPos runs yet", 0.f, 22.f, 0.5f, th.text);
-			text("Play with Random StartPos on and your", 0.f, -4.f, 0.32f, th.dim);
-			text("deaths and best runs show up here.", 0.f, -18.f, 0.32f, th.dim);
+			rspLabel(m_buttonMenu, "No StartPos runs yet", 0.f, 22.f, 0.5f, th.text, 0, &m_nodes);
+			rspLabel(m_buttonMenu, "Play with Random StartPos on and your", 0.f, -4.f, 0.32f, th.dim, 0, &m_nodes);
+			rspLabel(m_buttonMenu, "deaths and best runs show up here.", 0.f, -18.f, 0.32f, th.dim, 0, &m_nodes);
 		} else {
 			int total = 0, bestK = 0;
 			float bestV = 0.f;
@@ -99,32 +82,31 @@ protected:
 				total += v.deaths;
 				if (v.best > bestV) { bestV = v.best; bestK = k; }
 			}
-			text(fmt::format("{} deaths from StartPos", total), -140.f, 76.f, 0.38f, th.text, {0.f, 0.5f});
-			text(fmt::format("Best: StartPos {} ({:.0f}%)", bestK, bestV), 140.f, 76.f, 0.38f, th.accent, {1.f, 0.5f});
+			rspLabel(m_buttonMenu, fmt::format("{} deaths from StartPos", total), -140.f, 76.f, 0.38f, th.text, 1, &m_nodes);
+			rspLabel(m_buttonMenu, fmt::format("Best: StartPos {} ({:.0f}%)", bestK, bestV), 140.f, 76.f, 0.38f, th.accent, 2, &m_nodes);
 
-			text("StartPos", -136.f, 54.f, 0.3f, th.dim, {0.f, 0.5f});
-			text("Best run", -40.f, 54.f, 0.3f, th.dim, {0.f, 0.5f});
-			text("Deaths", 140.f, 54.f, 0.3f, th.dim, {1.f, 0.5f});
+			rspLabel(m_buttonMenu, "StartPos", -136.f, 54.f, 0.3f, th.dim, 1, &m_nodes);
+			rspLabel(m_buttonMenu, "Best run", -40.f, 54.f, 0.3f, th.dim, 1, &m_nodes);
+			rspLabel(m_buttonMenu, "Deaths", 140.f, 54.f, 0.3f, th.dim, 2, &m_nodes);
 
 			int i = 0;
 			for (auto& [k, v] : st.sec) {
 				if (i >= 7) break;
 				float y = 34.f - i * 19.f;
-				text(fmt::format("StartPos {}", k), -136.f, y, 0.36f, th.text, {0.f, 0.5f});
-				this->bar(-40.f, y, 90.f, 8.f, lift, 255);
-				if (v.best > 0.f) this->bar(-40.f, y, std::max(3.f, 90.f * v.best / 100.f), 8.f, th.accent, 255);
-				text(fmt::format("{:.0f}%", v.best), 58.f, y, 0.34f, th.text, {0.f, 0.5f});
-				text(std::to_string(v.deaths), 140.f, y, 0.36f, th.text, {1.f, 0.5f});
+				rspLabel(m_buttonMenu, fmt::format("StartPos {}", k), -136.f, y, 0.36f, th.text, 1, &m_nodes);
+				this->bar(-40.f, y, 90.f, 8.f, lift);
+				if (v.best > 0.f) this->bar(-40.f, y, std::max(3.f, 90.f * v.best / 100.f), 8.f, th.accent);
+				rspLabel(m_buttonMenu, fmt::format("{:.0f}%", v.best), 58.f, y, 0.34f, th.text, 1, &m_nodes);
+				rspLabel(m_buttonMenu, std::to_string(v.deaths), 140.f, y, 0.36f, th.text, 2, &m_nodes);
 				i++;
 			}
 			if (st.sec.size() > 7) {
-				text(fmt::format("+{} more", st.sec.size() - 7), 0.f, -98.f, 0.28f, th.dim);
+				rspLabel(m_buttonMenu, fmt::format("+{} more", st.sec.size() - 7), 0.f, -98.f, 0.28f, th.dim, 0, &m_nodes);
 			}
 		}
 
-		text(kRSPVersion, 140.f, 124.f, 0.24f, th.dim, {1.f, 0.5f});
 		this->pillButton("Reset", 90.f, 22.f, -60.f, -118.f, menu_selector(RSPStatsPopup::onReset), lift, th.text);
-		this->pillButton("Settings", 90.f, 22.f, 60.f, -118.f, menu_selector(RSPStatsPopup::onSettings), th.accent, th.panel);
+		this->pillButton("Menu", 90.f, 22.f, 60.f, -118.f, menu_selector(RSPStatsPopup::onMenu), th.accent, th.panel);
 	}
 
 	void onReset(CCObject*) {
@@ -134,7 +116,7 @@ protected:
 		this->build();
 	}
 
-	void onSettings(CCObject*) {
+	void onMenu(CCObject*) {
 		rspOpenSettings();
 	}
 
