@@ -70,16 +70,15 @@ namespace {
 	// Everything the mod needs, read once per event (never per frame).
 	struct Cfg {
 		std::string trigger = "deaths", mode = "random", style = "off";
-		int deaths = 3, maxDeaths = 5, chance = 40, tolerance = 2, avoid = 2, minPct = 0;
-		int passes = 1, giveUp = 0, clears = 2, delayMs = 200;
+		int deaths = 3, maxDeaths = 5, chance = 40, tolerance = 2, avoid = 2;
+		int passes = 1, giveUp = 0, clears = 2;
 		bool randThreshold = false, loopBuild = true, inclStart = false, onComplete = false;
-		bool clearCp = false, ignorePractice = false, useSeed = false, trackStats = true;
+		bool useSeed = false, trackStats = true;
 		std::string seed;
 		bool indicator = true, sound = false, label = true, showTotal = false;
-		float indSize = 0.35f, lblSize = 0.3f;
-		int indOp = 70, lblOp = 60, indHeight = 17;
-		float indHold = 0.9f;
-		std::string soundFile = "counter003.ogg", lblPos = "top-left", lblColor = "theme", hudStyle = "pill";
+		float indSize = 0.35f, indHold = 1.2f, lblSize = 0.3f;
+		int indOp = 70, indHeight = 17, lblOp = 60;
+		std::string soundFile = "counter003.ogg", lblPos = "top-left", lblColor = "white";
 	};
 
 	Cfg loadCfg() {
@@ -92,17 +91,13 @@ namespace {
 		c.chance = static_cast<int>(rspOpt<int64_t>("chaos-chance"));
 		c.tolerance = static_cast<int>(rspOpt<int64_t>("streak-tolerance"));
 		c.avoid = static_cast<int>(rspOpt<int64_t>("avoid-recent"));
-		c.minPct = static_cast<int>(rspOpt<int64_t>("min-percent"));
 		c.passes = static_cast<int>(rspOpt<int64_t>("passes-needed"));
 		c.giveUp = static_cast<int>(rspOpt<int64_t>("give-up-after"));
 		c.clears = static_cast<int>(rspOpt<int64_t>("clears-needed"));
-		c.delayMs = static_cast<int>(rspOpt<int64_t>("respawn-delay"));
 		c.randThreshold = rspOpt<bool>("random-threshold");
 		c.loopBuild = rspOpt<bool>("loop-build");
 		c.inclStart = rspOpt<bool>("include-level-start");
 		c.onComplete = rspOpt<bool>("switch-on-complete");
-		c.clearCp = rspOpt<bool>("clear-checkpoints");
-		c.ignorePractice = rspOpt<bool>("ignore-practice");
 		c.useSeed = rspOpt<bool>("use-seed");
 		c.trackStats = rspOpt<bool>("track-stats");
 		c.seed = rspOpt<std::string>("seed");
@@ -119,7 +114,6 @@ namespace {
 		c.lblOp = static_cast<int>(rspOpt<int64_t>("label-opacity"));
 		c.lblPos = rspOpt<std::string>("label-position");
 		c.lblColor = rspOpt<std::string>("label-color");
-		c.hudStyle = rspOpt<std::string>("hud-style");
 
 		std::string preset = rspOpt<std::string>("preset");
 		if (preset == "practice") {
@@ -136,7 +130,7 @@ namespace {
 }
 
 // ===========================================================================
-// PlayLayer: collect StartPos, detect deaths, switch, safe-guard everything
+// PlayLayer: find StartPos, count every death, switch, safe-guard progress
 // ===========================================================================
 struct $modify(RSPPlayLayer, PlayLayer) {
 	// Run our reset code before other StartPos-related mods look at the StartPos.
@@ -157,27 +151,24 @@ struct $modify(RSPPlayLayer, PlayLayer) {
 		bool pending = false;
 		bool applied = false;                // we have set a StartPos at some point
 		bool deathHandled = false;
-		bool suspect = false;                // destroyPlayer ran but the death flag wasn't set yet
 		bool statsDirty = false;
 		bool useSeeded = false;
-		std::chrono::steady_clock::time_point suspectTime{};
+		std::chrono::steady_clock::time_point lastDeath{};
 		std::mt19937 seeded;
 		int levelKey = 0;
 		int deathCount = 0, totalDeaths = 0, threshold = 0, streak = 0, direction = 1;
 		int passes = 0, sectionDeaths = 0, clears = 0;
 		float bestPercent = 0.f;
-		CCNode* hud = nullptr;
-		CCScale9Sprite* hudBg = nullptr;
-		CCLabelBMFont* hudLabel = nullptr;
+		CCLabelBMFont* hud = nullptr;
 		CCNode* ind = nullptr;
 		CCScale9Sprite* indBg = nullptr;
 		CCLabelBMFont* indLabel = nullptr;
 		std::string hudKey;
 	};
 
-	// ---- StartPos collection -------------------------------------------
+	// ---- finding the StartPos (three independent sources, merged) --------------
 
-	// Object ID 31 is the StartPos object. Recorded BEFORE the game's own addObject
+	// Source 1: every object the game adds. Recorded BEFORE the game's own addObject
 	// (the game may drop StartPos it doesn't need) and retained so the pointer stays valid.
 	void addObject(GameObject* obj) {
 		if (obj && obj->m_objectID == 31) {
@@ -196,9 +187,15 @@ struct $modify(RSPPlayLayer, PlayLayer) {
 	void setupHasCompleted() {
 		PlayLayer::setupHasCompleted();
 		g_rspFromStartPos = false;
-		g_rspFreezeNext = false;
+		m_fields->lastDeath = std::chrono::steady_clock::time_point{};
 
-		// Second source: look through every level object and merge anything the hook missed.
+		// Source 2: every StartPos object created while the level loaded (collect.cpp).
+		for (auto& r : g_rspLoaded) {
+			if (r) this->rspAddStart(r.data());
+		}
+		g_rspLoaded.clear();
+
+		// Source 3: look through every level object.
 		if (m_objects) {
 			for (auto obj : CCArrayExt<GameObject*>(m_objects)) {
 				if (obj && obj->m_objectID == 31) {
@@ -206,10 +203,9 @@ struct $modify(RSPPlayLayer, PlayLayer) {
 				}
 			}
 		}
+
 		this->rspSortStarts();
 		m_fields->levelKey = rspLevelKey(m_level);
-
-		if (m_fields->starts.empty()) return; // no StartPos here: the mod stays idle for this level
 		if (!rspEnabled()) return;
 
 		auto c = loadCfg();
@@ -217,11 +213,16 @@ struct $modify(RSPPlayLayer, PlayLayer) {
 			m_fields->seeded.seed(fnv1a(c.seed));
 			m_fields->useSeeded = true;
 		}
-		if (rspDebug()) log::info("Random StartPos: found {} StartPos", m_fields->starts.size());
+		if (rspDebug()) log::info("Random StartPos {}: found {} StartPos", kRSPVersion, m_fields->starts.size());
 		this->rspRefreshHud(c);
 	}
 
-	// ---- death detection ------------------------------------------------
+	void onEnterTransitionDidFinish() {
+		PlayLayer::onEnterTransitionDidFinish();
+		if (rspEnabled()) rspLevelWarn(); // tell the player about incompatible StartPos mods
+	}
+
+	// ---- death detection: EVERY death is counted -------------------------------
 
 	void destroyPlayer(PlayerObject* player, GameObject* obj) {
 		if (!rspEnabled()) {
@@ -230,16 +231,16 @@ struct $modify(RSPPlayLayer, PlayLayer) {
 		}
 		bool wasDead = (m_player1 && m_player1->m_isDead) || (m_player2 && m_player2->m_isDead);
 		PlayLayer::destroyPlayer(player, obj);
-		if (wasDead) return;
 		if (obj != nullptr && obj == m_anticheatSpike) return;
 
+		auto now = std::chrono::steady_clock::now();
+		auto since = now - m_fields->lastDeath;
+		if (since < std::chrono::milliseconds(150)) return;                        // same death reported twice
+		if (wasDead && since < std::chrono::milliseconds(1500)) return;            // still in the death animation
 		bool isDead = (m_player1 && m_player1->m_isDead) || (m_player2 && m_player2->m_isDead);
-		if (!isDead) {
-			// The flag may be set a moment later: remember it and let resetLevel confirm.
-			m_fields->suspect = true;
-			m_fields->suspectTime = std::chrono::steady_clock::now();
-			return;
-		}
+		if (!isDead && m_isIgnoreDamageEnabled) return;                            // damage ignored: no real death
+
+		m_fields->lastDeath = now;
 		m_fields->deathHandled = true;
 		this->rspOnDeath(loadCfg());
 	}
@@ -249,28 +250,27 @@ struct $modify(RSPPlayLayer, PlayLayer) {
 			// Mod is off: do nothing except put you back at 0% once if we had moved you.
 			if (m_fields->applied && rspOpt<bool>("reset-on-disable")) this->rspClearStartPos();
 			m_fields->deathHandled = false;
-			m_fields->suspect = false;
 			PlayLayer::resetLevel();
 			return;
 		}
 
 		bool diedNow = (m_player1 && m_player1->m_isDead) || (m_player2 && m_player2->m_isDead);
-		bool suspectFresh = m_fields->suspect &&
-			std::chrono::steady_clock::now() - m_fields->suspectTime < std::chrono::seconds(3);
-		if (!m_fields->deathHandled && (diedNow || suspectFresh) && !m_fields->starts.empty()) {
+		if (!m_fields->deathHandled && diedNow) {
+			m_fields->lastDeath = std::chrono::steady_clock::now();
 			this->rspOnDeath(loadCfg()); // safety net: the death wasn't counted yet
 		}
 		m_fields->deathHandled = false;
-		m_fields->suspect = false;
 
 		if (m_fields->pending) {
 			m_fields->pending = false;
-			if (m_isPracticeMode && rspOpt<bool>("clear-checkpoints")) {
-				this->removeAllCheckpoints();
-			}
 			this->setStartPosObject(m_fields->pendingPick);
 		}
 		PlayLayer::resetLevel();
+
+		// Safe mode: is this run starting from a StartPos (ours, or another mod's)?
+		bool byUs = m_fields->current != nullptr;
+		bool byOther = !m_isPracticeMode && m_player1 && m_player1->getPositionX() > 60.f;
+		g_rspFromStartPos = byUs || byOther;
 	}
 
 	void levelComplete() {
@@ -300,7 +300,6 @@ struct $modify(RSPPlayLayer, PlayLayer) {
 
 	void onQuit() {
 		g_rspFromStartPos = false;
-		g_rspFreezeNext = false;
 		if (m_fields->statsDirty) {
 			rspStatsSave(m_fields->levelKey);
 			(void)Mod::get()->saveData();
@@ -308,7 +307,7 @@ struct $modify(RSPPlayLayer, PlayLayer) {
 		PlayLayer::onQuit();
 	}
 
-	// ---- logic ----------------------------------------------------------
+	// ---- logic ----------------------------------------------------------------
 
 	void rspSortStarts() {
 		auto& s = m_fields->starts;
@@ -351,15 +350,15 @@ struct $modify(RSPPlayLayer, PlayLayer) {
 	}
 
 	void rspOnDeath(Cfg const& c) {
-		if (m_isPracticeMode && c.ignorePractice) return;
-		if (m_fields->starts.empty()) return;
+		m_fields->totalDeaths++; // every death counts
+		if (m_fields->starts.empty()) {
+			this->rspRefreshHud(c);
+			return;
+		}
 
 		float percent = this->getCurrentPercent();
-		if (percent < static_cast<float>(c.minPct)) return;
-
 		float x = m_player1 ? m_player1->getPositionX() : 0.f;
 		m_fields->deathsAt[this->rspSectionOf(x)]++;
-		m_fields->totalDeaths++;
 
 		if (c.trackStats && m_fields->current) {
 			auto& sec = rspStatsFor(m_fields->levelKey).sec[this->rspIndexOf(m_fields->current) + 1];
@@ -392,7 +391,7 @@ struct $modify(RSPPlayLayer, PlayLayer) {
 		}
 
 		if (rspDebug()) {
-			log::info("Random StartPos: death at {:.1f}% (switch: {})", percent, doSwitch ? "yes" : "no");
+			log::info("Random StartPos: death #{} at {:.1f}% (switch: {})", m_fields->totalDeaths, percent, doSwitch ? "yes" : "no");
 		}
 		if (doSwitch) this->rspSwitchStartPos(c);
 		this->rspRefreshHud(c);
@@ -497,11 +496,9 @@ struct $modify(RSPPlayLayer, PlayLayer) {
 		m_fields->pendingPick = pick;
 		m_fields->pending = true;
 		m_fields->applied = true;
-		g_rspFromStartPos = (pick != nullptr);
-		g_rspFreezeNext = c.delayMs > 0;
+		g_rspFromStartPos = (pick != nullptr) || g_rspFromStartPos;
 
-		// Applied right away (it happens during the death animation) and once more
-		// right before the respawn, so a switch can't be missed.
+		// Applied right away (during the death animation) and once more right before the respawn.
 		this->setStartPosObject(pick);
 
 		int idx = this->rspIndexOf(pick);
@@ -521,7 +518,6 @@ struct $modify(RSPPlayLayer, PlayLayer) {
 		m_fields->current = nullptr;
 		m_fields->pending = false;
 		g_rspFromStartPos = false;
-		g_rspFreezeNext = false;
 		this->setStartPosObject(nullptr);
 		if (m_fields->hud) m_fields->hud->setVisible(false);
 		if (m_fields->ind) m_fields->ind->setVisible(false);
@@ -538,123 +534,119 @@ struct $modify(RSPPlayLayer, PlayLayer) {
 		return had;
 	}
 
-	// ---- on-screen pieces (built only when needed, redrawn only on change) --
-
-	void rspMakeBadge(CCNode*& node, CCScale9Sprite*& bg, CCLabelBMFont*& lb, int z) {
-		node = CCNode::create();
-		node->ignoreAnchorPointForPosition(false);
-		bg = CCScale9Sprite::create("square02_001.png");
-		node->addChild(bg, 0);
-		lb = CCLabelBMFont::create("", "bigFont.fnt");
-		node->addChild(lb, 1);
-		this->addChild(node, z);
+	bool rspHasStarts() {
+		return !m_fields->starts.empty();
 	}
 
-	void rspLayoutBadge(CCNode* node, CCScale9Sprite* bg, CCLabelBMFont* lb) {
-		auto sz = lb->getScaledContentSize();
-		CCSize box(sz.width + 22.f, sz.height + 12.f);
-		node->setContentSize(box);
-		bg->setContentSize(box);
-		bg->setPosition({box.width / 2, box.height / 2});
-		lb->setPosition({box.width / 2, box.height / 2});
-	}
+	// ---- the subtle "Next: StartPos" note shown as you die ----------------------
 
 	void rspShowIndicator(std::string const& text, Cfg const& c) {
 		if (!c.indicator) return;
 		auto th = rspTheme();
-		if (!m_fields->ind) this->rspMakeBadge(m_fields->ind, m_fields->indBg, m_fields->indLabel, 1001);
-
+		if (!m_fields->ind) {
+			auto node = CCNode::create();
+			node->ignoreAnchorPointForPosition(false);
+			auto bg = CCScale9Sprite::create("square02_001.png");
+			node->addChild(bg, 0);
+			auto lb = CCLabelBMFont::create("", "bigFont.fnt");
+			node->addChild(lb, 1);
+			this->addChild(node, 1001);
+			m_fields->ind = node;
+			m_fields->indBg = bg;
+			m_fields->indLabel = lb;
+		}
 		auto lb = m_fields->indLabel;
 		auto bg = m_fields->indBg;
 		lb->setString(text.c_str());
 		lb->setScale(c.indSize);
 		lb->setColor(th.text);
 		bg->setColor(th.panel);
-		this->rspLayoutBadge(m_fields->ind, bg, lb);
+
+		auto sz = lb->getScaledContentSize();
+		CCSize box(sz.width + 22.f, sz.height + 12.f);
+		m_fields->ind->setContentSize(box);
+		bg->setContentSize(box);
+		bg->setPosition({box.width / 2, box.height / 2});
+		lb->setPosition({box.width / 2, box.height / 2});
 
 		auto win = CCDirector::get()->getWinSize();
 		m_fields->ind->setAnchorPoint({0.5f, 0.5f});
-		m_fields->ind->setPosition({win.width / 2, win.height * static_cast<float>(c.indHeight) / 100.f}); // low on the screen
+		m_fields->ind->setPosition({win.width / 2, win.height * static_cast<float>(c.indHeight) / 100.f});
 		m_fields->ind->setVisible(true);
 
 		GLubyte op = static_cast<GLubyte>(255 * c.indOp / 100);
-		float hold = c.indHold + static_cast<float>(c.delayMs) / 1000.f;
 		bg->stopAllActions();
 		lb->stopAllActions();
 		bg->setOpacity(0);
 		lb->setOpacity(0);
-		bg->runAction(fadeSeq(static_cast<GLubyte>(op * 0.7f), hold));
-		lb->runAction(fadeSeq(op, hold));
+		bg->runAction(fadeSeq(static_cast<GLubyte>(op * 0.7f), c.indHold));
+		lb->runAction(fadeSeq(op, c.indHold));
 	}
 
+	// ---- the classic on-screen label (only redrawn when its text changes) -------
+
 	void rspRefreshHud(Cfg const& c) {
-		bool show = c.label && !m_fields->starts.empty();
-		if (!show) {
+		if (!c.label) {
 			if (m_fields->hud) m_fields->hud->setVisible(false);
 			return;
 		}
 		auto& starts = m_fields->starts;
-		int idx = this->rspIndexOf(m_fields->current);
-		std::string where = idx >= 0 ? fmt::format("{}/{}", idx + 1, starts.size()) : std::string("Start");
-		std::string status;
-		if (c.style == "build") status = fmt::format("clear {}/{}", m_fields->clears, c.clears);
-		else if (c.style == "beat") status = fmt::format("pass {}/{}", m_fields->passes, c.passes);
-		else if (c.trigger == "chance") status = fmt::format("{}% per death", c.chance);
-		else if (c.trigger == "streak") status = fmt::format("streak {}/{}", m_fields->streak, c.deaths);
-		else status = fmt::format("{} left", std::max(0, this->rspThreshold(c) - m_fields->deathCount));
-		std::string text = fmt::format("StartPos {}  |  {}", where, status);
+		std::string text;
+		if (starts.empty()) {
+			text = "StartPos: none found";
+		} else {
+			int idx = this->rspIndexOf(m_fields->current);
+			std::string where = idx >= 0 ? fmt::format("{}/{}", idx + 1, starts.size()) : std::string("Start");
+			std::string status;
+			if (c.style == "build") status = fmt::format("clear {}/{}", m_fields->clears, c.clears);
+			else if (c.style == "beat") status = fmt::format("pass {}/{}", m_fields->passes, c.passes);
+			else if (c.trigger == "chance") status = fmt::format("{}% per death", c.chance);
+			else if (c.trigger == "streak") status = fmt::format("streak {}/{}", m_fields->streak, c.deaths);
+			else status = fmt::format("switch in {}", std::max(0, this->rspThreshold(c) - m_fields->deathCount));
+			text = fmt::format("StartPos {}  |  {}", where, status);
+		}
 		if (c.showTotal) text += fmt::format("  |  deaths {}", m_fields->totalDeaths);
 
-		std::string key = fmt::format("{}#{}#{}#{}#{}#{}#{}", text, c.lblPos, c.lblColor, c.lblSize, c.lblOp, c.hudStyle, rspOpt<std::string>("theme"));
+		std::string key = fmt::format("{}#{}#{}#{}#{}#{}", text, c.lblPos, c.lblColor, c.lblSize, c.lblOp, rspOpt<std::string>("theme"));
 		if (m_fields->hud && key == m_fields->hudKey && m_fields->hud->isVisible()) return; // unchanged
 		m_fields->hudKey = key;
 
-		if (!m_fields->hud) this->rspMakeBadge(m_fields->hud, m_fields->hudBg, m_fields->hudLabel, 1000);
+		if (!m_fields->hud) {
+			m_fields->hud = CCLabelBMFont::create("", "bigFont.fnt");
+			this->addChild(m_fields->hud, 1000);
+		}
+		auto lb = m_fields->hud;
 		auto th = rspTheme();
-		auto lb = m_fields->hudLabel;
-		auto bg = m_fields->hudBg;
-		GLubyte op = static_cast<GLubyte>(255 * c.lblOp / 100);
-
 		lb->setString(text.c_str());
 		lb->setScale(c.lblSize);
-		lb->setColor(namedColor(c.lblColor, th.accent));
-		lb->setOpacity(op);
-		bg->setColor(th.panel);
-		if (c.hudStyle == "minimal") bg->setOpacity(0);
-		else if (c.hudStyle == "glass") bg->setOpacity(static_cast<GLubyte>(op * 0.3f));
-		else bg->setOpacity(static_cast<GLubyte>(op * 0.65f));
-		this->rspLayoutBadge(m_fields->hud, bg, lb);
+		lb->setColor(starts.empty() ? ccColor3B{255, 150, 150} : namedColor(c.lblColor, th.accent));
+		lb->setOpacity(static_cast<GLubyte>(255 * c.lblOp / 100));
 
 		auto win = CCDirector::get()->getWinSize();
 		float m = 8.f;
-		auto hud = m_fields->hud;
 		if (c.lblPos == "top-right") {
-			hud->setAnchorPoint({1.f, 1.f});
-			hud->setPosition({win.width - m, win.height - m});
+			lb->setAnchorPoint({1.f, 1.f});
+			lb->setPosition({win.width - m, win.height - m});
 		} else if (c.lblPos == "bottom-left") {
-			hud->setAnchorPoint({0.f, 0.f});
-			hud->setPosition({m, m});
+			lb->setAnchorPoint({0.f, 0.f});
+			lb->setPosition({m, m});
 		} else if (c.lblPos == "bottom-right") {
-			hud->setAnchorPoint({1.f, 0.f});
-			hud->setPosition({win.width - m, m});
+			lb->setAnchorPoint({1.f, 0.f});
+			lb->setPosition({win.width - m, m});
 		} else {
-			hud->setAnchorPoint({0.f, 1.f});
-			hud->setPosition({m, win.height - m});
+			lb->setAnchorPoint({0.f, 1.f});
+			lb->setPosition({m, win.height - m});
 		}
-		hud->setVisible(true);
+		lb->setVisible(true);
 	}
 
 	void rspUpdateLabel() {
 		if (rspEnabled()) this->rspRefreshHud(loadCfg());
 	}
-
-	bool rspHasStarts() {
-		return !m_fields->starts.empty();
-	}
 };
 
 // ===========================================================================
-// PauseLayer: one compact panel (on/off checkbox + settings button)
+// PauseLayer: one compact panel (on/off checkbox + Menu button)
 // ===========================================================================
 struct $modify(RSPPauseLayer, PauseLayer) {
 	void customSetup() {
@@ -667,7 +659,7 @@ struct $modify(RSPPauseLayer, PauseLayer) {
 		bool none = pl && !pl->rspHasStarts();
 
 		std::string where = rspOpt<std::string>("pause-panel-position");
-		float w = 118.f, h = 28.f, margin = 8.f;
+		float w = 150.f, h = 28.f, margin = 8.f;
 		float cx = (where == "bottom-left" || where == "top-left") ? margin + w / 2 : win.width - margin - w / 2;
 		float cy = (where == "top-left" || where == "top-right") ? win.height - margin - h / 2 : margin + h / 2;
 
@@ -695,24 +687,28 @@ struct $modify(RSPPauseLayer, PauseLayer) {
 		title->setColor(none ? th.dim : th.accent);
 		menu->addChild(title);
 
-		CCNode* gear = nullptr;
-		if (CCSpriteFrameCache::sharedSpriteFrameCache()->spriteFrameByName("GJ_optionsBtn02_001.png")) {
-			auto spr = CCSprite::createWithSpriteFrameName("GJ_optionsBtn02_001.png");
-			spr->setScale(0.42f);
-			gear = spr;
-		} else {
-			auto spr = ButtonSprite::create("...");
-			spr->setScale(0.5f);
-			gear = spr;
-		}
-		auto settingsBtn = CCMenuItemSpriteExtra::create(gear, this, menu_selector(RSPPauseLayer::onRSPSettings));
-		settingsBtn->setPosition({w / 2 - 16.f, 0.f});
-		menu->addChild(settingsBtn);
+		// the button that opens the new menu
+		auto btn = CCNode::create();
+		btn->setContentSize(CCSize(48.f, 20.f));
+		btn->ignoreAnchorPointForPosition(false);
+		auto btnBg = CCScale9Sprite::create("square02_001.png");
+		btnBg->setContentSize(CCSize(48.f, 20.f));
+		btnBg->setPosition({24.f, 10.f});
+		btnBg->setColor(th.accent);
+		btn->addChild(btnBg);
+		auto btnLb = CCLabelBMFont::create("Menu", "bigFont.fnt");
+		btnLb->setScale(0.34f);
+		btnLb->setColor(th.panel);
+		btnLb->setPosition({24.f, 10.f});
+		btn->addChild(btnLb);
+		auto item = CCMenuItemSpriteExtra::create(btn, this, menu_selector(RSPPauseLayer::onRSPMenu));
+		item->setPosition({w / 2 - 30.f, 0.f});
+		menu->addChild(item);
 
 		this->addChild(menu);
 	}
 
-	void onRSPSettings(CCObject*) {
+	void onRSPMenu(CCObject*) {
 		rspOpenSettings();
 	}
 
