@@ -1,5 +1,5 @@
-// Optional module: an "SP" button on the main menu's bottom bar that opens the
-// Random StartPos menu, so you can reach it without starting a level.
+// Optional module: an "SP" button on the main menu that opens the Random StartPos menu,
+// so you can reach it without starting a level.
 // If this file ever fails to compile, delete it: the rest of the mod still works.
 #include "rsp.hpp"
 
@@ -9,9 +9,6 @@ struct $modify(RSPMainMenu, MenuLayer) {
 	bool init() {
 		if (!MenuLayer::init()) return false;
 		if (!rspOpt<bool>("show-main-menu-button")) return true;
-
-		auto bar = typeinfo_cast<CCMenu*>(this->getChildByID("bottom-menu"));
-		if (!bar) return true;
 
 		auto th = rspTheme();
 		float s = 36.f;
@@ -32,8 +29,19 @@ struct $modify(RSPMainMenu, MenuLayer) {
 
 		auto item = CCMenuItemSpriteExtra::create(node, this, menu_selector(RSPMainMenu::onRSPMenu));
 		item->setID("random-startpos-button"_spr);
-		bar->addChild(item);
-		bar->updateLayout();
+
+		auto bar = typeinfo_cast<CCMenu*>(this->getChildByID("bottom-menu"));
+		if (bar) {
+			bar->addChild(item);
+			bar->updateLayout();
+		} else {
+			// no bottom bar found: put the button in the bottom-left corner instead
+			auto menu = CCMenu::create();
+			menu->setPosition({0.f, 0.f});
+			item->setPosition({s, s});
+			menu->addChild(item);
+			this->addChild(menu, 50);
+		}
 		return true;
 	}
 
