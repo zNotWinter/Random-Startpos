@@ -14,7 +14,7 @@
 
 using namespace geode::prelude;
 
-inline constexpr char const* kRSPVersion = "v1.5.0";
+inline constexpr char const* kRSPVersion = "v1.6.0";
 
 // ---------------------------------------------------------------------------
 // Settings helpers
@@ -45,12 +45,20 @@ inline RSPTheme rspTheme() {
 	return {{16, 20, 46}, {93, 240, 255}, {236, 242, 255}, {150, 160, 195}};
 }
 
+inline GLubyte rspPanelOpacity() {
+	std::string s = rspOpt<std::string>("menu-style");
+	if (s == "glass") return 175;
+	if (s == "outline") return 110;
+	return 246;
+}
+
 // ---------------------------------------------------------------------------
-// State shared between the optional modules
+// State shared between the modules
 // ---------------------------------------------------------------------------
-inline bool g_rspFromStartPos = false;  // playing from a StartPos this mod picked (safe mode)
-inline bool g_rspFreezeNext = false;    // the next respawn follows a switch (respawn delay)
-inline void (*g_rspOpenMenu)() = nullptr; // set by menu.cpp if it is compiled in
+inline bool g_rspFromStartPos = false;     // the current run starts from a StartPos (safe mode)
+inline void (*g_rspOpenMenu)() = nullptr;  // set by menu.cpp if it is part of the build
+inline bool g_rspLoading = false;          // a level is loading (set by collect.cpp)
+inline std::vector<Ref<StartPosObject>> g_rspLoaded; // every StartPos created while loading
 
 // ---------------------------------------------------------------------------
 // StartPos stats (in memory while playing, saved when leaving the level)
@@ -110,7 +118,7 @@ inline void rspStatsSave(int id) {
 }
 
 // ---------------------------------------------------------------------------
-// Compatibility warning (other StartPos mods that are turned on)
+// Compatibility warnings
 // ---------------------------------------------------------------------------
 inline std::vector<std::string> rspConflictingMods() {
 	std::vector<std::string> out;
@@ -136,11 +144,37 @@ inline void rspCompatWarn() {
 	for (size_t i = 0; i < bad.size(); i++) names += (i ? ", " : "") + bad[i];
 	std::string body =
 		"<cy>" + names + "</c> is turned on.\n\n"
-		"Random StartPos and other StartPos mods both control where you respawn. "
-		"Running them together can send you to the wrong spot, throw your music out of sync, "
-		"or stop the switching altogether.\n\n"
-		"To fix it, turn that mod off in <cg>Geode > Mods</c> and restart the game.";
-	FLAlertLayer::create("Compatibility warning", body, "Got it")->show();
+		"Random StartPos is not compatible with <cr>Smart StartPos</c> or <cr>StartPos Switcher</c>. "
+		"They all decide where you respawn, so running them together can send you to the wrong spot, "
+		"stop the switching, or throw your music out of sync.\n\n"
+		"Please turn that mod off in <cg>Geode > Mods</c> and restart the game.";
+	FLAlertLayer::create("Incompatible mod detected", body, "Got it")->show();
+}
+
+// Shown when you enter a level.
+inline void rspLevelWarn() {
+	if (!rspOpt<bool>("compat-warning")) return;
+	if (!rspConflictingMods().empty()) {
+		rspCompatWarn();
+		return;
+	}
+	// Smart StartPos / StartPos Switcher can also be a feature inside a menu mod we can't look into.
+	static bool shownGeneric = false;
+	if (shownGeneric) return;
+	for (char const* id : {"tobyadd.gdh", "eclipse.eclipse-menu", "thesillydoggo.qolmod"}) {
+		auto mod = Loader::get()->getLoadedMod(id);
+		if (mod && mod->isEnabled()) {
+			shownGeneric = true;
+			FLAlertLayer::create(
+				"Before you play",
+				"Random StartPos is not compatible with <cr>Smart StartPos</c> or <cr>StartPos Switcher</c>.\n\n"
+				"If either is switched on (including inside <cy>" + mod->getName() + "</c>), "
+				"please turn it off first, or the StartPos will not switch correctly.",
+				"Got it"
+			)->show();
+			return;
+		}
+	}
 }
 
 inline void rspOpenSettings() {
@@ -155,5 +189,20 @@ inline void rspOpenSettings() {
 		)->show();
 		openSettingsPopup(Mod::get());
 	}
-	if (rspOpt<bool>("compat-warning")) rspCompatWarn();
+}
+
+// ---------------------------------------------------------------------------
+// Popup layout helper: a label placed at an offset from the popup centre.
+// align: 0 = centred on x, 1 = starts at x, 2 = ends at x
+// ---------------------------------------------------------------------------
+inline CCLabelBMFont* rspLabel(CCNode* parent, std::string const& s, float x, float y, float scale,
+                               ccColor3B col, int align, std::vector<CCNode*>* bucket = nullptr) {
+	auto l = CCLabelBMFont::create(s.c_str(), "bigFont.fnt");
+	l->setScale(scale);
+	l->setColor(col);
+	float w = l->getScaledContentSize().width;
+	float cx = align == 1 ? x + w / 2 : align == 2 ? x - w / 2 : x;
+	parent->addChildAtPosition(l, Anchor::Center, {cx, y});
+	if (bucket) bucket->push_back(l);
+	return l;
 }
